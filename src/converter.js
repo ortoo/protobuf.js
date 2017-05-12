@@ -96,6 +96,8 @@ converter.fromObject = function fromObject(mtype) {
     /* eslint-disable no-unexpected-multiline, block-scoped-var, no-redeclare */
     var fields = mtype.fieldsArray;
     var gen = util.codegen(["d"], mtype.name + "$fromObject")
+    ("if(d==null)")
+        ("return d")
     ("if(d instanceof this.ctor)")
         ("return d");
     if (!fields.length) return gen
@@ -130,10 +132,10 @@ converter.fromObject = function fromObject(mtype) {
 
         // Non-repeated fields
         } else {
-            if (!(field.resolvedType instanceof Enum)) gen // no need to test for null/undefined if an enum (uses switch)
+            if (!field.resolvedType) gen // no need to test for null/undefined if an enum (uses switch)
     ("if(d%s!=null){", prop); // !== undefined && !== null
         genValuePartial_fromObject(gen, field, /* not sorted */ i, prop);
-            if (!(field.resolvedType instanceof Enum)) gen
+            if (!field.resolvedType) gen
     ("}");
         }
     } return gen
@@ -156,7 +158,12 @@ function genValuePartial_toObject(gen, field, fieldIndex, prop) {
         if (field.resolvedType instanceof Enum) gen
             ("d%s=o.enums===String?types[%i].values[m%s]:m%s", prop, fieldIndex, prop, prop);
         else gen
-            ("d%s=types[%i].toObject(m%s,o)", prop, fieldIndex, prop);
+            ("var t=types[%d].toObject(m%s,o)", fieldIndex, prop)
+            ("if(typeof t==='undefined'){")
+              ("delete d%s", prop)
+            ("}else{")
+              ("d%s=t", prop)
+            ("}");
     } else {
         var isUnsigned = false;
         switch (field.type) {
@@ -199,6 +206,8 @@ converter.toObject = function toObject(mtype) {
     if (!fields.length)
         return util.codegen()("return {}");
     var gen = util.codegen(["m", "o"], mtype.name + "$toObject")
+    ("if(m==null)") // == undefined || == null
+        ("return m")
     ("if(!o)")
         ("o={}")
     ("var d={}");
@@ -268,22 +277,25 @@ converter.toObject = function toObject(mtype) {
         ("d%s={}", prop)
         ("for(var j=0;j<ks2.length;++j){");
             genValuePartial_toObject(gen, field, /* sorted */ index, prop + "[ks2[j]]")
-        ("}");
+        ("}")
+    ("}");
         } else if (field.repeated) { gen
     ("if(m%s&&m%s.length){", prop, prop)
         ("d%s=[]", prop)
         ("for(var j=0;j<m%s.length;++j){", prop);
             genValuePartial_toObject(gen, field, /* sorted */ index, prop + "[j]")
-        ("}");
-        } else { gen
-    ("if(m%s!=null&&m.hasOwnProperty(%j)){", prop, field.name); // !== undefined && !== null
+        ("}")
+    ('}');
+        } else {
+          if (!field.resolvedType || field.resolvedType instanceof Enum) gen
+    ("if(m%s!=null&&m.hasOwnProperty(%j)){", prop, field.name); // !== null && !== undefined
         genValuePartial_toObject(gen, field, /* sorted */ index, prop);
         if (field.partOf) gen
-        ("if(o.oneofs)")
+        ("if(m%s!=null&&m.hasOwnProperty(%j)&&o.oneofs)", prop, field.name)
             ("d%s=%j", util.safeProp(field.partOf.name), field.name);
+        if (!field.resolvedType || field.resolvedType instanceof Enum) gen
+    ('}');
         }
-        gen
-    ("}");
     }
     return gen
     ("return d");
