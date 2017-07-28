@@ -16,7 +16,7 @@ function missing(field) {
  */
 function decoder(mtype) {
     /* eslint-disable no-unexpected-multiline */
-    var gen = util.codegen("r", "l")
+    var gen = util.codegen(["r", "l"], mtype.name + "$decode")
     ("if(!(r instanceof Reader))")
         ("r=Reader.create(r)")
     ("var c=l===undefined?r.len:r.pos+l,m=new this.ctor" + (mtype.fieldsArray.filter(function(field) { return field.map; }).length ? ",k" : ""))
@@ -31,9 +31,9 @@ function decoder(mtype) {
     var i = 0;
     for (; i < /* initializes */ mtype.fieldsArray.length; ++i) {
         var field = mtype._fieldsArray[i].resolve(),
-            type  = field.resolvedType instanceof Enum ? "uint32" : field.type,
+            type  = field.resolvedType instanceof Enum ? "int32" : field.type,
             ref   = "m" + util.safeProp(field.name); gen
-            ("case %d:", field.id);
+            ("case %i:", field.id);
 
         // Map fields
         if (field.map) { gen
@@ -44,12 +44,12 @@ function decoder(mtype) {
                 ("r.pos++"); // assumes id 2 + value wireType
             if (types.long[field.keyType] !== undefined) {
                 if (types.basic[type] === undefined) gen
-                ("%s[typeof k===\"object\"?util.longToHash(k):k]=types[%d].decode(r,r.uint32())", ref, i); // can't be groups
+                ("%s[typeof k===\"object\"?util.longToHash(k):k]=types[%i].decode(r,r.uint32())", ref, i); // can't be groups
                 else gen
                 ("%s[typeof k===\"object\"?util.longToHash(k):k]=r.%s()", ref, type);
             } else {
                 if (types.basic[type] === undefined) gen
-                ("%s[k]=types[%d].decode(r,r.uint32())", ref, i); // can't be groups
+                ("%s[k]=types[%i].decode(r,r.uint32())", ref, i); // can't be groups
                 else gen
                 ("%s[k]=r.%s()", ref, type);
             }
@@ -70,15 +70,15 @@ function decoder(mtype) {
 
             // Non-packed
             if (types.basic[type] === undefined) gen(field.resolvedType.group
-                    ? "%s.push(types[%d].decode(r))"
-                    : "%s.push(types[%d].decode(r,r.uint32()))", ref, i);
+                    ? "%s.push(types[%i].decode(r))"
+                    : "%s.push(types[%i].decode(r,r.uint32()))", ref, i);
             else gen
                     ("%s.push(r.%s())", ref, type);
 
         // Non-repeated
         } else if (types.basic[type] === undefined) gen(field.resolvedType.group
-                ? "%s=types[%d].decode(r)"
-                : "%s=types[%d].decode(r,r.uint32())", ref, i);
+                ? "%s=types[%i].decode(r)"
+                : "%s=types[%i].decode(r,r.uint32())", ref, i);
         else gen
                 ("%s=r.%s()", ref, type);
         gen

@@ -162,7 +162,7 @@ function buildRanges(keyword, ranges) {
                 parts.push(range[0] + " to " + (range[1] === 0x1FFFFFFF ? "max" : range[1]));
         });
         push("");
-        push(keyword + " " + parts.join(", "));
+        push(keyword + " " + parts.join(", ") + ";");
     }
 }
 
@@ -229,7 +229,7 @@ function buildFieldOptions(field) {
     var sb = [];
     keys.forEach(function(key) {
         var val = field.options[key];
-        var wireType = types.packed[field.resolvedType instanceof Enum ? "uint32" : field.type];
+        var wireType = types.packed[field.resolvedType instanceof Enum ? "int32" : field.type];
         switch (key) {
             case "packed":
                 val = Boolean(val);

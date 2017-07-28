@@ -13,24 +13,25 @@ $root.Message = (function() {
 
     /**
      * Properties of a Message.
-     * @typedef Message$Properties
-     * @type {Object}
-     * @property {string} [stringVal] Message stringVal.
-     * @property {Array.<string>} [stringRepeated] Message stringRepeated.
-     * @property {number|Long} [uint64Val] Message uint64Val.
-     * @property {Array.<number|Long>} [uint64Repeated] Message uint64Repeated.
-     * @property {Uint8Array} [bytesVal] Message bytesVal.
-     * @property {Array.<Uint8Array>} [bytesRepeated] Message bytesRepeated.
-     * @property {Message.SomeEnum} [enumVal] Message enumVal.
-     * @property {Array.<Message.SomeEnum>} [enumRepeated] Message enumRepeated.
-     * @property {Object.<string,number|Long>} [int64Map] Message int64Map.
+     * @exports IMessage
+     * @interface IMessage
+     * @property {string|null} [stringVal] Message stringVal
+     * @property {Array.<string>|null} [stringRepeated] Message stringRepeated
+     * @property {number|Long|null} [uint64Val] Message uint64Val
+     * @property {Array.<number|Long>|null} [uint64Repeated] Message uint64Repeated
+     * @property {Uint8Array|null} [bytesVal] Message bytesVal
+     * @property {Array.<Uint8Array>|null} [bytesRepeated] Message bytesRepeated
+     * @property {Message.SomeEnum|null} [enumVal] Message enumVal
+     * @property {Array.<Message.SomeEnum>|null} [enumRepeated] Message enumRepeated
+     * @property {Object.<string,number|Long>|null} [int64Map] Message int64Map
      */
 
     /**
      * Constructs a new Message.
      * @exports Message
+     * @classdesc Represents a Message.
      * @constructor
-     * @param {Message$Properties=} [properties] Properties to set
+     * @param {IMessage=} [properties] Properties to set
      */
     function Message(properties) {
         this.stringRepeated = [];
@@ -46,61 +47,82 @@ $root.Message = (function() {
 
     /**
      * Message stringVal.
-     * @type {string}
+     * @member {string} stringVal
+     * @memberof Message
+     * @instance
      */
     Message.prototype.stringVal = "";
 
     /**
      * Message stringRepeated.
-     * @type {Array.<string>}
+     * @member {Array.<string>} stringRepeated
+     * @memberof Message
+     * @instance
      */
     Message.prototype.stringRepeated = $util.emptyArray;
 
     /**
      * Message uint64Val.
-     * @type {number|Long}
+     * @member {number|Long} uint64Val
+     * @memberof Message
+     * @instance
      */
     Message.prototype.uint64Val = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
     /**
      * Message uint64Repeated.
-     * @type {Array.<number|Long>}
+     * @member {Array.<number|Long>} uint64Repeated
+     * @memberof Message
+     * @instance
      */
     Message.prototype.uint64Repeated = $util.emptyArray;
 
     /**
      * Message bytesVal.
-     * @type {Uint8Array}
+     * @member {Uint8Array} bytesVal
+     * @memberof Message
+     * @instance
      */
     Message.prototype.bytesVal = $util.newBuffer([]);
 
     /**
      * Message bytesRepeated.
-     * @type {Array.<Uint8Array>}
+     * @member {Array.<Uint8Array>} bytesRepeated
+     * @memberof Message
+     * @instance
      */
     Message.prototype.bytesRepeated = $util.emptyArray;
 
     /**
      * Message enumVal.
-     * @type {Message.SomeEnum}
+     * @member {Message.SomeEnum} enumVal
+     * @memberof Message
+     * @instance
      */
     Message.prototype.enumVal = 1;
 
     /**
      * Message enumRepeated.
-     * @type {Array.<Message.SomeEnum>}
+     * @member {Array.<Message.SomeEnum>} enumRepeated
+     * @memberof Message
+     * @instance
      */
     Message.prototype.enumRepeated = $util.emptyArray;
 
     /**
      * Message int64Map.
-     * @type {Object.<string,number|Long>}
+     * @member {Object.<string,number|Long>} int64Map
+     * @memberof Message
+     * @instance
      */
     Message.prototype.int64Map = $util.emptyObject;
 
     /**
      * Creates a new Message instance using the specified properties.
-     * @param {Message$Properties=} [properties] Properties to set
+     * @function create
+     * @memberof Message
+     * @static
+     * @param {IMessage=} [properties] Properties to set
      * @returns {Message} Message instance
      */
     Message.create = function create(properties) {
@@ -109,7 +131,10 @@ $root.Message = (function() {
 
     /**
      * Encodes the specified Message message. Does not implicitly {@link Message.verify|verify} messages.
-     * @param {Message$Properties} message Message message or plain object to encode
+     * @function encode
+     * @memberof Message
+     * @static
+     * @param {IMessage} message Message message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
@@ -135,11 +160,11 @@ $root.Message = (function() {
             for (var i = 0; i < message.bytesRepeated.length; ++i)
                 writer.uint32(/* id 6, wireType 2 =*/50).bytes(message.bytesRepeated[i]);
         if (message.enumVal != null && message.hasOwnProperty("enumVal"))
-            writer.uint32(/* id 7, wireType 0 =*/56).uint32(message.enumVal);
+            writer.uint32(/* id 7, wireType 0 =*/56).int32(message.enumVal);
         if (message.enumRepeated != null && message.enumRepeated.length) {
             writer.uint32(/* id 8, wireType 2 =*/66).fork();
             for (var i = 0; i < message.enumRepeated.length; ++i)
-                writer.uint32(message.enumRepeated[i]);
+                writer.int32(message.enumRepeated[i]);
             writer.ldelim();
         }
         if (message.int64Map != null && message.hasOwnProperty("int64Map"))
@@ -150,7 +175,10 @@ $root.Message = (function() {
 
     /**
      * Encodes the specified Message message, length delimited. Does not implicitly {@link Message.verify|verify} messages.
-     * @param {Message$Properties} message Message message or plain object to encode
+     * @function encodeDelimited
+     * @memberof Message
+     * @static
+     * @param {IMessage} message Message message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
@@ -160,6 +188,9 @@ $root.Message = (function() {
 
     /**
      * Decodes a Message message from the specified reader or buffer.
+     * @function decode
+     * @memberof Message
+     * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
      * @param {number} [length] Message length if known beforehand
      * @returns {Message} Message
@@ -203,7 +234,7 @@ $root.Message = (function() {
                 message.bytesRepeated.push(reader.bytes());
                 break;
             case 7:
-                message.enumVal = reader.uint32();
+                message.enumVal = reader.int32();
                 break;
             case 8:
                 if (!(message.enumRepeated && message.enumRepeated.length))
@@ -211,9 +242,9 @@ $root.Message = (function() {
                 if ((tag & 7) === 2) {
                     var end2 = reader.uint32() + reader.pos;
                     while (reader.pos < end2)
-                        message.enumRepeated.push(reader.uint32());
+                        message.enumRepeated.push(reader.int32());
                 } else
-                    message.enumRepeated.push(reader.uint32());
+                    message.enumRepeated.push(reader.int32());
                 break;
             case 9:
                 reader.skip().pos++;
@@ -233,6 +264,9 @@ $root.Message = (function() {
 
     /**
      * Decodes a Message message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof Message
+     * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
      * @returns {Message} Message
      * @throws {Error} If the payload is not a reader or valid buffer
@@ -240,14 +274,17 @@ $root.Message = (function() {
      */
     Message.decodeDelimited = function decodeDelimited(reader) {
         if (!(reader instanceof $Reader))
-            reader = $Reader(reader);
+            reader = new $Reader(reader);
         return this.decode(reader, reader.uint32());
     };
 
     /**
      * Verifies a Message message.
+     * @function verify
+     * @memberof Message
+     * @static
      * @param {Object.<string,*>} message Plain object to verify
-     * @returns {?string} `null` if valid, otherwise the reason why it is not
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
      */
     Message.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
@@ -315,6 +352,9 @@ $root.Message = (function() {
 
     /**
      * Creates a Message message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof Message
+     * @static
      * @param {Object.<string,*>} object Plain object
      * @returns {Message} Message
      */
@@ -414,18 +454,12 @@ $root.Message = (function() {
     };
 
     /**
-     * Creates a Message message from a plain object. Also converts values to their respective internal types.
-     * This is an alias of {@link Message.fromObject}.
-     * @function
-     * @param {Object.<string,*>} object Plain object
-     * @returns {Message} Message
-     */
-    Message.from = Message.fromObject;
-
-    /**
      * Creates a plain object from a Message message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof Message
+     * @static
      * @param {Message} message Message
-     * @param {$protobuf.ConversionOptions} [options] Conversion options
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
      * @returns {Object.<string,*>} Plain object
      */
     Message.toObject = function toObject(message, options) {
@@ -497,16 +531,10 @@ $root.Message = (function() {
     };
 
     /**
-     * Creates a plain object from this Message message. Also converts values to other types if specified.
-     * @param {$protobuf.ConversionOptions} [options] Conversion options
-     * @returns {Object.<string,*>} Plain object
-     */
-    Message.prototype.toObject = function toObject(options) {
-        return this.constructor.toObject(this, options);
-    };
-
-    /**
      * Converts this Message to JSON.
+     * @function toJSON
+     * @memberof Message
+     * @instance
      * @returns {Object.<string,*>} JSON object
      */
     Message.prototype.toJSON = function toJSON() {
@@ -515,9 +543,7 @@ $root.Message = (function() {
 
     /**
      * SomeEnum enum.
-     * @name SomeEnum
-     * @memberof Message
-     * @enum {number}
+     * @enum {string}
      * @property {number} ONE=1 ONE value
      * @property {number} TWO=2 TWO value
      */

@@ -27,7 +27,7 @@ function genValuePartial_fromObject(gen, field, fieldIndex, prop) {
                 ("default:");
                 gen
                 ("case%j:", keys[i])
-                ("case %j:", values[keys[i]])
+                ("case %i:", values[keys[i]])
                     ("m%s=%j", prop, values[keys[i]])
                     ("break");
             } gen
@@ -38,8 +38,8 @@ function genValuePartial_fromObject(gen, field, fieldIndex, prop) {
         var isUnsigned = false;
         switch (field.type) {
             case "double":
-            case "float":gen
-                ("m%s=Number(d%s)", prop, prop);
+            case "float": gen
+                ("m%s=Number(d%s)", prop, prop); // also catches "NaN", "Infinity"
                 break;
             case "uint32":
             case "fixed32": gen
@@ -95,7 +95,7 @@ function genValuePartial_fromObject(gen, field, fieldIndex, prop) {
 converter.fromObject = function fromObject(mtype) {
     /* eslint-disable no-unexpected-multiline, block-scoped-var, no-redeclare */
     var fields = mtype.fieldsArray;
-    var gen = util.codegen("d")
+    var gen = util.codegen(["d"], mtype.name + "$fromObject")
     ("if(d==null)")
         ("return d")
     ("if(d instanceof this.ctor)")
@@ -156,9 +156,9 @@ function genValuePartial_toObject(gen, field, fieldIndex, prop) {
     /* eslint-disable no-unexpected-multiline, block-scoped-var, no-redeclare */
     if (field.resolvedType) {
         if (field.resolvedType instanceof Enum) gen
-            ("d%s=o.enums===String?types[%d].values[m%s]:m%s", prop, fieldIndex, prop, prop);
+            ("d%s=o.enums===String?types[%i].values[m%s]:m%s", prop, fieldIndex, prop, prop);
         else gen
-            ("var t=types[%d].toObject(m%s,o)", fieldIndex, prop)
+            ("var t=types[%i].toObject(m%s,o)", fieldIndex, prop)
             ("if(typeof t==='undefined'){")
               ("delete d%s", prop)
             ("}else{")
@@ -167,6 +167,10 @@ function genValuePartial_toObject(gen, field, fieldIndex, prop) {
     } else {
         var isUnsigned = false;
         switch (field.type) {
+            case "double":
+            case "float": gen
+            ("d%s=o.json&&!isFinite(m%s)?String(m%s):m%s", prop, prop, prop, prop);
+                break;
             case "uint64":
                 isUnsigned = true;
                 // eslint-disable-line no-fallthrough
@@ -201,7 +205,7 @@ converter.toObject = function toObject(mtype) {
     var fields = mtype.fieldsArray.slice().sort(util.compareFieldsById);
     if (!fields.length)
         return util.codegen()("return {}");
-    var gen = util.codegen("m", "o")
+    var gen = util.codegen(["m", "o"], mtype.name + "$toObject")
     ("if(m==null)") // == undefined || == null
         ("return m")
     ("if(!o)")
@@ -243,10 +247,10 @@ converter.toObject = function toObject(mtype) {
         ("d%s=o.enums===String?%j:%j", prop, field.resolvedType.valuesById[field.typeDefault], field.typeDefault);
             else if (field.long) gen
         ("if(util.Long){")
-            ("var n=new util.Long(%d,%d,%j)", field.typeDefault.low, field.typeDefault.high, field.typeDefault.unsigned)
+            ("var n=new util.Long(%i,%i,%j)", field.typeDefault.low, field.typeDefault.high, field.typeDefault.unsigned)
             ("d%s=o.longs===String?n.toString():o.longs===Number?n.toNumber():n", prop)
         ("}else")
-            ("d%s=o.longs===String?%j:%d", prop, field.typeDefault.toString(), field.typeDefault.toNumber());
+            ("d%s=o.longs===String?%j:%i", prop, field.typeDefault.toString(), field.typeDefault.toNumber());
             else if (field.bytes) gen
         ("d%s=o.bytes===String?%j:%s", prop, String.fromCharCode.apply(String, field.typeDefault), "[" + Array.prototype.slice.call(field.typeDefault).join(",") + "]");
             else gen

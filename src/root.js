@@ -7,6 +7,7 @@ var Namespace = require("./namespace");
 
 var Field   = require("./field"),
     Enum    = require("./enum"),
+    OneOf   = require("./oneof"),
     util    = require("./util");
 
 var Type,   // cyclic
@@ -38,7 +39,7 @@ function Root(options) {
 
 /**
  * Loads a namespace descriptor into a root namespace.
- * @param {NamespaceDescriptor} json Nameespace descriptor
+ * @param {INamespace} json Nameespace descriptor
  * @param {Root} [root] Root namespace, defaults to create a new one if omitted
  * @returns {Root} Root namespace
  */
@@ -56,7 +57,7 @@ Root.fromJSON = function fromJSON(json, root) {
  * @function
  * @param {string} origin The file name of the importing file
  * @param {string} target The file name being imported
- * @returns {?string} Resolved path to `target` or `null` to skip the file
+ * @returns {string|null} Resolved path to `target` or `null` to skip the file
  */
 Root.prototype.resolvePath = util.path.resolve;
 
@@ -67,7 +68,7 @@ function SYNC() {} // eslint-disable-line no-empty-function
 /**
  * Loads one or multiple .proto or preprocessed .json files into this root namespace and calls the callback.
  * @param {string|string[]} filename Names of one or multiple files to load
- * @param {ParseOptions} options Parse options
+ * @param {IParseOptions} options Parse options
  * @param {LoadCallback} callback Callback function
  * @returns {undefined}
  */
@@ -198,10 +199,11 @@ Root.prototype.load = function load(filename, options, callback) {
         finish(null, self);
     return undefined;
 };
-// function load(filename:string, options:ParseOptions, callback:LoadCallback):undefined
+// function load(filename:string, options:IParseOptions, callback:LoadCallback):undefined
 
 /**
  * Loads one or multiple .proto or preprocessed .json files into this root namespace and calls the callback.
+ * @function Root#load
  * @param {string|string[]} filename Names of one or multiple files to load
  * @param {LoadCallback} callback Callback function
  * @returns {undefined}
@@ -211,21 +213,19 @@ Root.prototype.load = function load(filename, options, callback) {
 
 /**
  * Loads one or multiple .proto or preprocessed .json files into this root namespace and returns a promise.
- * @name Root#load
- * @function
+ * @function Root#load
  * @param {string|string[]} filename Names of one or multiple files to load
- * @param {ParseOptions} [options] Parse options. Defaults to {@link parse.defaults} when omitted.
+ * @param {IParseOptions} [options] Parse options. Defaults to {@link parse.defaults} when omitted.
  * @returns {Promise<Root>} Promise
  * @variation 3
  */
-// function load(filename:string, [options:ParseOptions]):Promise<Root>
+// function load(filename:string, [options:IParseOptions]):Promise<Root>
 
 /**
  * Synchronously loads one or multiple .proto or preprocessed .json files into this root namespace (node only).
- * @name Root#loadSync
- * @function
+ * @function Root#loadSync
  * @param {string|string[]} filename Names of one or multiple files to load
- * @param {ParseOptions} [options] Parse options. Defaults to {@link parse.defaults} when omitted.
+ * @param {IParseOptions} [options] Parse options. Defaults to {@link parse.defaults} when omitted.
  * @returns {Root} Root namespace
  * @throws {Error} If synchronous fetching is not supported (i.e. in browsers) or if a file's syntax is invalid
  */
@@ -287,7 +287,7 @@ Root.prototype._handleAdd = function _handleAdd(object) {
         if (exposeRe.test(object.name))
             object.parent[object.name] = object.values; // expose enum values as property of its parent
 
-    } else /* everything else is a namespace */ {
+    } else if (!(object instanceof OneOf)) /* everything else is a namespace */ {
 
         if (object instanceof Type) // Try to handle any deferred extensions
             for (var i = 0; i < this.deferred.length;)

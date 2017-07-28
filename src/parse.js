@@ -27,18 +27,9 @@ var base10Re    = /^[1-9][0-9]*$/,
     typeRefRe   = /^(?:\.?[a-zA-Z_][a-zA-Z_0-9]*)+$/,
     fqTypeRefRe = /^(?:\.[a-zA-Z][a-zA-Z_0-9]*)+$/;
 
-var camelCaseRe = /_([a-z])/g;
-
-function camelCase(str) {
-    return str.substring(0,1)
-         + str.substring(1)
-               .replace(camelCaseRe, function($0, $1) { return $1.toUpperCase(); });
-}
-
 /**
  * Result object returned from {@link parse}.
- * @typedef ParserResult
- * @type {Object.<string,*>}
+ * @interface IParserResult
  * @property {string|undefined} package Package name, if declared
  * @property {string[]|undefined} imports Imports, if any
  * @property {string[]|undefined} weakImports Weak imports, if any
@@ -48,20 +39,18 @@ function camelCase(str) {
 
 /**
  * Options modifying the behavior of {@link parse}.
- * @typedef ParseOptions
- * @type {Object.<string,*>}
+ * @interface IParseOptions
  * @property {boolean} [keepCase=false] Keeps field casing instead of converting to camel case
  */
 
 /**
  * Parses the given .proto source and returns an object with the parsed contents.
- * @function
  * @param {string} source Source contents
  * @param {Root} root Root to populate
- * @param {ParseOptions} [options] Parse options. Defaults to {@link parse.defaults} when omitted.
- * @returns {ParserResult} Parser result
+ * @param {IParseOptions} [options] Parse options. Defaults to {@link parse.defaults} when omitted.
+ * @returns {IParserResult} Parser result
  * @property {string} filename=null Currently processing file name for error reporting, if known
- * @property {ParseOptions} defaults Default {@link ParseOptions}
+ * @property {IParseOptions} defaults Default {@link IParseOptions}
  */
 function parse(source, root, options) {
     /* eslint-disable callback-return */
@@ -88,14 +77,14 @@ function parse(source, root, options) {
 
     var ptr = root;
 
-    var applyCase = options.keepCase ? function(name) { return name; } : camelCase;
+    var applyCase = options.keepCase ? function(name) { return name; } : util.camelCase;
 
     /* istanbul ignore next */
     function illegal(token, name, insideTryCatch) {
         var filename = parse.filename;
         if (!insideTryCatch)
             parse.filename = null;
-        return Error("illegal " + (name || "token") + " '" + token + "' (" + (filename ? filename + ", " : "") + "line " + tn.line() + ")");
+        return Error("illegal " + (name || "token") + " '" + token + "' (" + (filename ? filename + ", " : "") + "line " + tn.line + ")");
     }
 
     function readString() {
@@ -279,7 +268,7 @@ function parse(source, root, options) {
     }
 
     function ifBlock(obj, fnIf, fnElse) {
-        var trailingLine = tn.line();
+        var trailingLine = tn.line;
         if (obj) {
             obj.comment = cmnt(); // try block-type comment
             obj.filename = parse.filename;
@@ -383,9 +372,8 @@ function parse(source, root, options) {
 
         // JSON defaults to packed=true if not set so we have to set packed=false explicity when
         // parsing proto2 descriptors without the option, where applicable. This must be done for
-        // any type (not just packable types) because enums also use varint encoding and it is not
-        // yet known whether a type is an enum or not.
-        if (!isProto3 && field.repeated)
+        // all known packable types and anything that could be an enum (= is not a basic type).
+        if (!isProto3 && field.repeated && (types.packed[type] !== undefined || types.basic[type] === undefined))
             field.setOption("packed", false, /* ifNotSet */ true);
     }
 
@@ -743,9 +731,9 @@ function parse(source, root, options) {
  * @name parse
  * @function
  * @param {string} source Source contents
- * @param {ParseOptions} [options] Parse options. Defaults to {@link parse.defaults} when omitted.
- * @returns {ParserResult} Parser result
+ * @param {IParseOptions} [options] Parse options. Defaults to {@link parse.defaults} when omitted.
+ * @returns {IParserResult} Parser result
  * @property {string} filename=null Currently processing file name for error reporting, if known
- * @property {ParseOptions} defaults Default {@link ParseOptions}
+ * @property {IParseOptions} defaults Default {@link IParseOptions}
  * @variation 2
  */

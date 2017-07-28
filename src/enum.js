@@ -46,13 +46,13 @@ function Enum(name, values, options) {
 
     if (values)
         for (var keys = Object.keys(values), i = 0; i < keys.length; ++i)
-            this.valuesById[ this.values[keys[i]] = values[keys[i]] ] = keys[i];
+            if (typeof values[keys[i]] === "number") // use forward entries only
+                this.valuesById[ this.values[keys[i]] = values[keys[i]] ] = keys[i];
 }
 
 /**
  * Enum descriptor.
- * @typedef EnumDescriptor
- * @type {Object}
+ * @interface IEnum
  * @property {Object.<string,number>} values Enum values
  * @property {Object.<string,*>} [options] Enum options
  */
@@ -60,7 +60,7 @@ function Enum(name, values, options) {
 /**
  * Constructs an enum from an enum descriptor.
  * @param {string} name Enum name
- * @param {EnumDescriptor} json Enum descriptor
+ * @param {IEnum} json Enum descriptor
  * @returns {Enum} Created enum
  * @throws {TypeError} If arguments are invalid
  */
@@ -70,20 +70,20 @@ Enum.fromJSON = function fromJSON(name, json) {
 
 /**
  * Converts this enum to an enum descriptor.
- * @returns {EnumDescriptor} Enum descriptor
+ * @returns {IEnum} Enum descriptor
  */
 Enum.prototype.toJSON = function toJSON() {
-    return {
-        options : this.options,
-        values  : this.values
-    };
+    return util.toObject([
+        "options" , this.options,
+        "values"  , this.values
+    ]);
 };
 
 /**
  * Adds a value to this enum.
  * @param {string} name Value name
  * @param {number} id Value id
- * @param {?string} comment Comment, if any
+ * @param {string} [comment] Comment, if any
  * @returns {Enum} `this`
  * @throws {TypeError} If arguments are invalid
  * @throws {Error} If there is already a value with this name or id

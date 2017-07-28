@@ -74,7 +74,7 @@ function Namespace(name, options) {
 
     /**
      * Cached nested objects as an array.
-     * @type {?ReflectionObject[]}
+     * @type {ReflectionObject[]|null}
      * @private
      */
     this._nestedArray = null;
@@ -99,47 +99,38 @@ Object.defineProperty(Namespace.prototype, "nestedArray", {
 
 /**
  * Namespace descriptor.
- * @typedef NamespaceDescriptor
- * @type {Object}
+ * @interface INamespace
  * @property {Object.<string,*>} [options] Namespace options
- * @property {Object.<string,AnyNestedDescriptor>} nested Nested object descriptors
- */
-
-/**
- * Namespace base descriptor.
- * @typedef NamespaceBaseDescriptor
- * @type {Object}
- * @property {Object.<string,*>} [options] Namespace options
- * @property {Object.<string,AnyNestedDescriptor>} [nested] Nested object descriptors
+ * @property {Object.<string,AnyNestedObject>} [nested] Nested object descriptors
  */
 
 /**
  * Any extension field descriptor.
- * @typedef AnyExtensionFieldDescriptor
- * @type {ExtensionFieldDescriptor|ExtensionMapFieldDescriptor}
+ * @typedef AnyExtensionField
+ * @type {IExtensionField|IExtensionMapField}
  */
 
 /**
  * Any nested object descriptor.
- * @typedef AnyNestedDescriptor
- * @type {EnumDescriptor|TypeDescriptor|ServiceDescriptor|AnyExtensionFieldDescriptor|NamespaceDescriptor}
+ * @typedef AnyNestedObject
+ * @type {IEnum|IType|IService|AnyExtensionField|INamespace}
  */
-// ^ BEWARE: VSCode hangs forever when using more than 5 types (that's why AnyExtensionFieldDescriptor exists in the first place)
+// ^ BEWARE: VSCode hangs forever when using more than 5 types (that's why AnyExtensionField exists in the first place)
 
 /**
  * Converts this namespace to a namespace descriptor.
- * @returns {NamespaceBaseDescriptor} Namespace descriptor
+ * @returns {INamespace} Namespace descriptor
  */
 Namespace.prototype.toJSON = function toJSON() {
-    return {
-        options : this.options,
-        nested  : arrayToJSON(this.nestedArray)
-    };
+    return util.toObject([
+        "options" , this.options,
+        "nested"  , arrayToJSON(this.nestedArray)
+    ]);
 };
 
 /**
  * Adds nested objects to this namespace from nested object descriptors.
- * @param {Object.<string,AnyNestedDescriptor>} nestedJson Any nested object descriptors
+ * @param {Object.<string,AnyNestedObject>} nestedJson Any nested object descriptors
  * @returns {Namespace} `this`
  */
 Namespace.prototype.addJSON = function addJSON(nestedJson) {
@@ -167,7 +158,7 @@ Namespace.prototype.addJSON = function addJSON(nestedJson) {
 /**
  * Gets the nested object of the specified name.
  * @param {string} name Nested object name
- * @returns {?ReflectionObject} The reflection object or `null` if it doesn't exist
+ * @returns {ReflectionObject|null} The reflection object or `null` if it doesn't exist
  */
 Namespace.prototype.get = function get(name) {
     return this.nested && this.nested[name]
@@ -290,11 +281,11 @@ Namespace.prototype.resolveAll = function resolveAll() {
 };
 
 /**
- * Looks up the reflection object at the specified path, relative to this namespace.
+ * Recursively looks up the reflection object matching the specified path in the scope of this namespace.
  * @param {string|string[]} path Path to look up
  * @param {*|Array.<*>} filterTypes Filter types, any combination of the constructors of `protobuf.Type`, `protobuf.Enum`, `protobuf.Service` etc.
  * @param {boolean} [parentAlreadyChecked=false] If known, whether the parent has already been checked
- * @returns {?ReflectionObject} Looked up object or `null` if none could be found
+ * @returns {ReflectionObject|null} Looked up object or `null` if none could be found
  */
 Namespace.prototype.lookup = function lookup(path, filterTypes, parentAlreadyChecked) {
 
@@ -315,6 +306,7 @@ Namespace.prototype.lookup = function lookup(path, filterTypes, parentAlreadyChe
     // Start at root if path is absolute
     if (path[0] === "")
         return this.root.lookup(path.slice(1), filterTypes);
+
     // Test if the first part matches any nested object, and if so, traverse if path contains more
     var found = this.get(path[0]);
     if (found) {
@@ -323,7 +315,13 @@ Namespace.prototype.lookup = function lookup(path, filterTypes, parentAlreadyChe
                 return found;
         } else if (found instanceof Namespace && (found = found.lookup(path.slice(1), filterTypes, true)))
             return found;
-    }
+
+    // Otherwise try each nested namespace
+    } else
+        for (var i = 0; i < this.nestedArray.length; ++i)
+            if (this._nestedArray[i] instanceof Namespace && (found = this._nestedArray[i].lookup(path, filterTypes, true)))
+                return found;
+
     // If there hasn't been a match, try again at the parent
     if (this.parent === null || parentAlreadyChecked)
         return null;
@@ -336,7 +334,7 @@ Namespace.prototype.lookup = function lookup(path, filterTypes, parentAlreadyChe
  * @function
  * @param {string|string[]} path Path to look up
  * @param {boolean} [parentAlreadyChecked=false] Whether the parent has already been checked
- * @returns {?ReflectionObject} Looked up object or `null` if none could be found
+ * @returns {ReflectionObject|null} Looked up object or `null` if none could be found
  * @variation 2
  */
 // lookup(path: string, [parentAlreadyChecked: boolean])

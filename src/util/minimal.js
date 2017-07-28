@@ -99,16 +99,16 @@ util.isSet = function isSet(obj, prop) {
     return false;
 };
 
-/*
+/**
  * Any compatible Buffer instance.
  * This is a minimal stand-alone definition of a Buffer instance. The actual type is that exported by node's typings.
- * @typedef Buffer
- * @type {Uint8Array}
+ * @interface Buffer
+ * @extends Uint8Array
  */
 
 /**
  * Node's Buffer class if available.
- * @type {?function(new: Buffer)}
+ * @type {Constructor<Buffer>}
  */
 util.Buffer = (function() {
     try {
@@ -121,23 +121,10 @@ util.Buffer = (function() {
     }
 })();
 
-/**
- * Internal alias of or polyfull for Buffer.from.
- * @type {?function}
- * @param {string|number[]} value Value
- * @param {string} [encoding] Encoding if value is a string
- * @returns {Uint8Array}
- * @private
- */
+// Internal alias of or polyfull for Buffer.from.
 util._Buffer_from = null;
 
-/**
- * Internal alias of or polyfill for Buffer.allocUnsafe.
- * @type {?function}
- * @param {number} size Buffer size
- * @returns {Uint8Array}
- * @private
- */
+// Internal alias of or polyfill for Buffer.allocUnsafe.
 util._Buffer_allocUnsafe = null;
 
 /**
@@ -160,15 +147,14 @@ util.newBuffer = function newBuffer(sizeOrArray) {
 
 /**
  * Array implementation used in the browser. `Uint8Array` if supported, otherwise `Array`.
- * @type {?function(new: Uint8Array, *)}
+ * @type {Constructor<Uint8Array>}
  */
 util.Array = typeof Uint8Array !== "undefined" ? Uint8Array /* istanbul ignore next */ : Array;
 
-/*
+/**
  * Any compatible Long instance.
  * This is a minimal stand-alone definition of a Long instance. The actual type is that exported by long.js.
- * @typedef Long
- * @type {Object}
+ * @interface Long
  * @property {number} low Low bits
  * @property {number} high High bits
  * @property {boolean} unsigned Whether unsigned or not
@@ -176,7 +162,7 @@ util.Array = typeof Uint8Array !== "undefined" ? Uint8Array /* istanbul ignore n
 
 /**
  * Long.js's Long class if available.
- * @type {?function(new: Long)}
+ * @type {Constructor<Long>}
  */
 util.Long = /* istanbul ignore next */ global.dcodeIO && /* istanbul ignore next */ global.dcodeIO.Long || util.inquire("long");
 
@@ -255,7 +241,7 @@ util.lcFirst = function lcFirst(str) {
  * Creates a custom error constructor.
  * @memberof util
  * @param {string} name Error name
- * @returns {function} Custom error constructor
+ * @returns {Constructor<Error>} Custom error constructor
  */
 function newError(name) {
 
@@ -297,9 +283,10 @@ util.newError = newError;
  * @classdesc Error subclass indicating a protocol specifc error.
  * @memberof util
  * @extends Error
+ * @template T extends Message<T>
  * @constructor
  * @param {string} message Error message
- * @param {Object.<string,*>=} properties Additional properties
+ * @param {Object.<string,*>} [properties] Additional properties
  * @example
  * try {
  *     MyMessage.decode(someBuffer); // throws if required fields are missing
@@ -313,13 +300,20 @@ util.ProtocolError = newError("ProtocolError");
 /**
  * So far decoded message instance.
  * @name util.ProtocolError#instance
- * @type {Message}
+ * @type {Message<T>}
+ */
+
+/**
+ * A OneOf getter as returned by {@link util.oneOfGetter}.
+ * @typedef OneOfGetter
+ * @type {function}
+ * @returns {string|undefined} Set field name, if any
  */
 
 /**
  * Builds a getter for a oneof's present field name.
  * @param {string[]} fieldNames Field names
- * @returns {function():string|undefined} Unbound getter
+ * @returns {OneOfGetter} Unbound getter
  */
 util.oneOfGetter = function getOneOf(fieldNames) {
     var fieldMap = {};
@@ -339,9 +333,17 @@ util.oneOfGetter = function getOneOf(fieldNames) {
 };
 
 /**
+ * A OneOf setter as returned by {@link util.oneOfSetter}.
+ * @typedef OneOfSetter
+ * @type {function}
+ * @param {string|undefined} value Field name
+ * @returns {undefined}
+ */
+
+/**
  * Builds a setter for a oneof's present field name.
  * @param {string[]} fieldNames Field names
- * @returns {function(?string):undefined} Unbound setter
+ * @returns {OneOfSetter} Unbound setter
  */
 util.oneOfSetter = function setOneOf(fieldNames) {
 
@@ -358,34 +360,27 @@ util.oneOfSetter = function setOneOf(fieldNames) {
     };
 };
 
-/* istanbul ignore next */
 /**
- * Lazily resolves fully qualified type names against the specified root.
- * @param {Root} root Root instanceof
- * @param {Object.<number,string|ReflectionObject>} lazyTypes Type names
- * @returns {undefined}
- * @deprecated since 6.7.0 static code does not emit lazy types anymore
- */
-util.lazyResolve = function lazyResolve(root, lazyTypes) {
-    for (var i = 0; i < lazyTypes.length; ++i) {
-        for (var keys = Object.keys(lazyTypes[i]), j = 0; j < keys.length; ++j) {
-            var path = lazyTypes[i][keys[j]].split("."),
-                ptr  = root;
-            while (path.length)
-                ptr = ptr[path.shift()];
-            lazyTypes[i][keys[j]] = ptr;
-        }
-    }
-};
-
-/**
- * Default conversion options used for {@link Message#toJSON} implementations. Longs, enums and bytes are converted to strings by default.
- * @type {ConversionOptions}
+ * Default conversion options used for {@link Message#toJSON} implementations.
+ *
+ * These options are close to proto3's JSON mapping with the exception that internal types like Any are handled just like messages. More precisely:
+ *
+ * - Longs become strings
+ * - Enums become string keys
+ * - Bytes become base64 encoded strings
+ * - (Sub-)Messages become plain objects
+ * - Maps become plain objects with all string keys
+ * - Repeated fields become arrays
+ * - NaN and Infinity for float and double fields become strings
+ *
+ * @type {IConversionOptions}
+ * @see https://developers.google.com/protocol-buffers/docs/proto3?hl=en#json
  */
 util.toJSONOptions = {
     longs: String,
     enums: String,
-    bytes: String
+    bytes: String,
+    json: true
 };
 
 util._configure = function() {

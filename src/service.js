@@ -29,7 +29,7 @@ function Service(name, options) {
 
     /**
      * Cached methods as an array.
-     * @type {?Method[]}
+     * @type {Method[]|null}
      * @private
      */
     this._methodsArray = null;
@@ -37,17 +37,15 @@ function Service(name, options) {
 
 /**
  * Service descriptor.
- * @typedef ServiceDescriptor
- * @type {Object}
- * @property {Object.<string,*>} [options] Service options
- * @property {Object.<string,MethodDescriptor>} methods Method descriptors
- * @property {Object.<string,AnyNestedDescriptor>} [nested] Nested object descriptors
+ * @interface IService
+ * @extends INamespace
+ * @property {Object.<string,IMethod>} methods Method descriptors
  */
 
 /**
  * Constructs a service from a service descriptor.
  * @param {string} name Service name
- * @param {ServiceDescriptor} json Service descriptor
+ * @param {IService} json Service descriptor
  * @returns {Service} Created service
  * @throws {TypeError} If arguments are invalid
  */
@@ -64,15 +62,15 @@ Service.fromJSON = function fromJSON(name, json) {
 
 /**
  * Converts this service to a service descriptor.
- * @returns {ServiceDescriptor} Service descriptor
+ * @returns {IService} Service descriptor
  */
 Service.prototype.toJSON = function toJSON() {
     var inherited = Namespace.prototype.toJSON.call(this);
-    return {
-        options : inherited && inherited.options || undefined,
-        methods : Namespace.arrayToJSON(this.methodsArray) || /* istanbul ignore next */ {},
-        nested  : inherited && inherited.nested || undefined
-    };
+    return util.toObject([
+        "options" , inherited && inherited.options || undefined,
+        "methods" , Namespace.arrayToJSON(this.methodsArray) || /* istanbul ignore next */ {},
+        "nested"  , inherited && inherited.nested || undefined
+    ]);
 };
 
 /**
@@ -153,11 +151,11 @@ Service.prototype.remove = function remove(object) {
  */
 Service.prototype.create = function create(rpcImpl, requestDelimited, responseDelimited) {
     var rpcService = new rpc.Service(rpcImpl, requestDelimited, responseDelimited);
-    for (var i = 0; i < /* initializes */ this.methodsArray.length; ++i) {
-        rpcService[util.lcFirst(this._methodsArray[i].resolve().name)] = util.codegen("r","c")("return this.rpcCall(m,q,s,r,c)").eof(util.lcFirst(this._methodsArray[i].name), {
-            m: this._methodsArray[i],
-            q: this._methodsArray[i].resolvedRequestType.ctor,
-            s: this._methodsArray[i].resolvedResponseType.ctor
+    for (var i = 0, method; i < /* initializes */ this.methodsArray.length; ++i) {
+        rpcService[util.lcFirst((method = this._methodsArray[i]).resolve().name)] = util.codegen(["r","c"], util.lcFirst(method.name))("return this.rpcCall(m,q,s,r,c)")({
+            m: method,
+            q: method.resolvedRequestType.ctor,
+            s: method.resolvedResponseType.ctor
         });
     }
     return rpcService;

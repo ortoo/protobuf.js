@@ -1,8 +1,8 @@
 /*!
- * protobuf.js v6.7.2 (c) 2016, Daniel Wirtz
- * Compiled Sat, 08 Apr 2017 08:16:51 UTC
- * Licensed under the BSD-3-Clause License
- * see: https://github.com/dcodeIO/protobuf.js for details
+ * protobuf.js v6.8.1 (c) 2016, daniel wirtz
+ * compiled tue, 11 jul 2017 15:52:11 utc
+ * licensed under the bsd-3-clause license
+ * see: https://github.com/dcodeio/protobuf.js for details
  */
 (function(global,undefined){"use strict";(function prelude(modules, cache, entries) {
 
@@ -40,34 +40,46 @@
 module.exports = asPromise;
 
 /**
+ * Callback as used by {@link util.asPromise}.
+ * @typedef asPromiseCallback
+ * @type {function}
+ * @param {Error|null} error Error, if any
+ * @param {...*} params Additional arguments
+ * @returns {undefined}
+ */
+
+/**
  * Returns a promise from a node-style callback function.
  * @memberof util
- * @param {function(?Error, ...*)} fn Function to call
+ * @param {asPromiseCallback} fn Function to call
  * @param {*} ctx Function context
  * @param {...*} params Function arguments
  * @returns {Promise<*>} Promisified function
  */
 function asPromise(fn, ctx/*, varargs */) {
-    var params = [];
-    for (var i = 2; i < arguments.length;)
-        params.push(arguments[i++]);
-    var pending = true;
-    return new Promise(function asPromiseExecutor(resolve, reject) {
-        params.push(function asPromiseCallback(err/*, varargs */) {
+    var params  = new Array(arguments.length - 1),
+        offset  = 0,
+        index   = 2,
+        pending = true;
+    while (index < arguments.length)
+        params[offset++] = arguments[index++];
+    return new Promise(function executor(resolve, reject) {
+        params[offset] = function callback(err/*, varargs */) {
             if (pending) {
                 pending = false;
                 if (err)
                     reject(err);
                 else {
-                    var args = [];
-                    for (var i = 1; i < arguments.length;)
-                        args.push(arguments[i++]);
-                    resolve.apply(null, args);
+                    var params = new Array(arguments.length - 1),
+                        offset = 0;
+                    while (offset < params.length)
+                        params[offset++] = arguments[offset];
+                    resolve.apply(null, params);
                 }
             }
-        });
+        };
         try {
-            fn.apply(ctx || this, params); // eslint-disable-line no-invalid-this
+            fn.apply(ctx || null, params);
         } catch (err) {
             if (pending) {
                 pending = false;
@@ -120,7 +132,8 @@ for (var i = 0; i < 64;)
  * @returns {string} Base64 encoded string
  */
 base64.encode = function encode(buffer, start, end) {
-    var string = []; // alt: new Array(Math.ceil((end - start) / 3) * 4);
+    var parts = null,
+        chunk = [];
     var i = 0, // output index
         j = 0, // goto index
         t;     // temporary
@@ -128,29 +141,38 @@ base64.encode = function encode(buffer, start, end) {
         var b = buffer[start++];
         switch (j) {
             case 0:
-                string[i++] = b64[b >> 2];
+                chunk[i++] = b64[b >> 2];
                 t = (b & 3) << 4;
                 j = 1;
                 break;
             case 1:
-                string[i++] = b64[t | b >> 4];
+                chunk[i++] = b64[t | b >> 4];
                 t = (b & 15) << 2;
                 j = 2;
                 break;
             case 2:
-                string[i++] = b64[t | b >> 6];
-                string[i++] = b64[b & 63];
+                chunk[i++] = b64[t | b >> 6];
+                chunk[i++] = b64[b & 63];
                 j = 0;
                 break;
         }
+        if (i > 8191) {
+            (parts || (parts = [])).push(String.fromCharCode.apply(String, chunk));
+            i = 0;
+        }
     }
     if (j) {
-        string[i++] = b64[t];
-        string[i  ] = 61;
+        chunk[i++] = b64[t];
+        chunk[i++] = 61;
         if (j === 1)
-            string[i + 1] = 61;
+            chunk[i++] = 61;
     }
-    return String.fromCharCode.apply(String, string);
+    if (parts) {
+        if (i)
+            parts.push(String.fromCharCode.apply(String, chunk.slice(0, i)));
+        return parts.join("");
+    }
+    return String.fromCharCode.apply(String, chunk.slice(0, i));
 };
 
 var invalidEncoding = "invalid encoding";
@@ -811,32 +833,16 @@ var protobuf = exports;
  */
 protobuf.build = "minimal";
 
-/**
- * Named roots.
- * This is where pbjs stores generated structures (the option `-r, --root` specifies a name).
- * Can also be used manually to make roots available accross modules.
- * @name roots
- * @type {Object.<string,Root>}
- * @example
- * // pbjs -r myroot -o compiled.js ...
- *
- * // in another module:
- * require("./compiled.js");
- *
- * // in any subsequent module:
- * var root = protobuf.roots["myroot"];
- */
-protobuf.roots = {};
-
 // Serialization
-protobuf.Writer       = require(15);
-protobuf.BufferWriter = require(16);
+protobuf.Writer       = require(16);
+protobuf.BufferWriter = require(17);
 protobuf.Reader       = require(9);
 protobuf.BufferReader = require(10);
 
 // Utility
-protobuf.util         = require(14);
-protobuf.rpc          = require(11);
+protobuf.util         = require(15);
+protobuf.rpc          = require(12);
+protobuf.roots        = require(11);
 protobuf.configure    = configure;
 
 /* istanbul ignore next */
@@ -853,11 +859,11 @@ function configure() {
 protobuf.Writer._configure(protobuf.BufferWriter);
 configure();
 
-},{"10":10,"11":11,"14":14,"15":15,"16":16,"9":9}],9:[function(require,module,exports){
+},{"10":10,"11":11,"12":12,"15":15,"16":16,"17":17,"9":9}],9:[function(require,module,exports){
 "use strict";
 module.exports = Reader;
 
-var util      = require(14);
+var util      = require(15);
 
 var BufferReader; // cyclic
 
@@ -1162,6 +1168,8 @@ Reader.prototype.bytes = function read_bytes() {
         throw indexOutOfRange(this, length);
 
     this.pos += length;
+    if (Array.isArray(this.buf)) // plain array
+        return this.buf.slice(start, end);
     return start === end // fix for IE 10/Win8 and others' subarray returning array of size 1
         ? new this.buf.constructor(0)
         : this._slice.call(this.buf, start, end);
@@ -1260,7 +1268,7 @@ Reader._configure = function(BufferReader_) {
     });
 };
 
-},{"14":14}],10:[function(require,module,exports){
+},{"15":15}],10:[function(require,module,exports){
 "use strict";
 module.exports = BufferReader;
 
@@ -1268,7 +1276,7 @@ module.exports = BufferReader;
 var Reader = require(9);
 (BufferReader.prototype = Object.create(Reader.prototype)).constructor = BufferReader;
 
-var util = require(14);
+var util = require(15);
 
 /**
  * Constructs a new buffer reader instance.
@@ -1306,7 +1314,27 @@ BufferReader.prototype.string = function read_string_buffer() {
  * @returns {Buffer} Value read
  */
 
-},{"14":14,"9":9}],11:[function(require,module,exports){
+},{"15":15,"9":9}],11:[function(require,module,exports){
+"use strict";
+module.exports = {};
+
+/**
+ * Named roots.
+ * This is where pbjs stores generated structures (the option `-r, --root` specifies a name).
+ * Can also be used manually to make roots available accross modules.
+ * @name roots
+ * @type {Object.<string,Root>}
+ * @example
+ * // pbjs -r myroot -o compiled.js ...
+ *
+ * // in another module:
+ * require("./compiled.js");
+ *
+ * // in any subsequent module:
+ * var root = protobuf.roots["myroot"];
+ */
+
+},{}],12:[function(require,module,exports){
 "use strict";
 
 /**
@@ -1319,7 +1347,7 @@ var rpc = exports;
  * RPC implementation passed to {@link Service#create} performing a service request on network level, i.e. by utilizing http requests or websockets.
  * @typedef RPCImpl
  * @type {function}
- * @param {Method|rpc.ServiceMethod} method Reflected or static method being called
+ * @param {Method|rpc.ServiceMethod<Message<{}>,Message<{}>>} method Reflected or static method being called
  * @param {Uint8Array} requestData Request data
  * @param {RPCImplCallback} callback Callback function
  * @returns {undefined}
@@ -1337,18 +1365,18 @@ var rpc = exports;
  * Node-style callback as used by {@link RPCImpl}.
  * @typedef RPCImplCallback
  * @type {function}
- * @param {?Error} error Error, if any, otherwise `null`
- * @param {?Uint8Array} [response] Response data or `null` to signal end of stream, if there hasn't been an error
+ * @param {Error|null} error Error, if any, otherwise `null`
+ * @param {Uint8Array|null} [response] Response data or `null` to signal end of stream, if there hasn't been an error
  * @returns {undefined}
  */
 
-rpc.Service = require(12);
+rpc.Service = require(13);
 
-},{"12":12}],12:[function(require,module,exports){
+},{"13":13}],13:[function(require,module,exports){
 "use strict";
 module.exports = Service;
 
-var util = require(14);
+var util = require(15);
 
 // Extends EventEmitter
 (Service.prototype = Object.create(util.EventEmitter.prototype)).constructor = Service;
@@ -1358,30 +1386,22 @@ var util = require(14);
  *
  * Differs from {@link RPCImplCallback} in that it is an actual callback of a service method which may not return `response = null`.
  * @typedef rpc.ServiceMethodCallback
+ * @template TRes extends Message<TRes>
  * @type {function}
- * @param {?Error} error Error, if any
- * @param {?Message} [response] Response message
+ * @param {Error|null} error Error, if any
+ * @param {TRes} [response] Response message
  * @returns {undefined}
  */
 
 /**
- * A service method part of a {@link rpc.ServiceMethodMixin|ServiceMethodMixin} and thus {@link rpc.Service} as created by {@link Service.create}.
+ * A service method part of a {@link rpc.Service} as created by {@link Service.create}.
  * @typedef rpc.ServiceMethod
+ * @template TReq extends Message<TReq>
+ * @template TRes extends Message<TRes>
  * @type {function}
- * @param {Message|Object.<string,*>} request Request message or plain object
- * @param {rpc.ServiceMethodCallback} [callback] Node-style callback called with the error, if any, and the response message
- * @returns {Promise<Message>} Promise if `callback` has been omitted, otherwise `undefined`
- */
-
-/**
- * A service method mixin.
- *
- * When using TypeScript, mixed in service methods are only supported directly with a type definition of a static module (used with reflection). Otherwise, explicit casting is required.
- * @typedef rpc.ServiceMethodMixin
- * @type {Object.<string,rpc.ServiceMethod>}
- * @example
- * // Explicit casting with TypeScript
- * (myRpcService["myMethod"] as protobuf.rpc.ServiceMethod)(...)
+ * @param {TReq|Properties<TReq>} request Request message or plain object
+ * @param {rpc.ServiceMethodCallback<TRes>} [callback] Node-style callback called with the error, if any, and the response message
+ * @returns {Promise<Message<TRes>>} Promise if `callback` has been omitted, otherwise `undefined`
  */
 
 /**
@@ -1389,7 +1409,6 @@ var util = require(14);
  * @classdesc An RPC service as returned by {@link Service#create}.
  * @exports rpc.Service
  * @extends util.EventEmitter
- * @augments rpc.ServiceMethodMixin
  * @constructor
  * @param {RPCImpl} rpcImpl RPC implementation
  * @param {boolean} [requestDelimited=false] Whether requests are length-delimited
@@ -1404,7 +1423,7 @@ function Service(rpcImpl, requestDelimited, responseDelimited) {
 
     /**
      * RPC implementation. Becomes `null` once the service is ended.
-     * @type {?RPCImpl}
+     * @type {RPCImpl|null}
      */
     this.rpcImpl = rpcImpl;
 
@@ -1423,12 +1442,14 @@ function Service(rpcImpl, requestDelimited, responseDelimited) {
 
 /**
  * Calls a service method through {@link rpc.Service#rpcImpl|rpcImpl}.
- * @param {Method|rpc.ServiceMethod} method Reflected or static method
- * @param {function} requestCtor Request constructor
- * @param {function} responseCtor Response constructor
- * @param {Message|Object.<string,*>} request Request message or plain object
- * @param {rpc.ServiceMethodCallback} callback Service callback
+ * @param {Method|rpc.ServiceMethod<TReq,TRes>} method Reflected or static method
+ * @param {Constructor<TReq>} requestCtor Request constructor
+ * @param {Constructor<TRes>} responseCtor Response constructor
+ * @param {TReq|Properties<TReq>} request Request message or plain object
+ * @param {rpc.ServiceMethodCallback<TRes>} callback Service callback
  * @returns {undefined}
+ * @template TReq extends Message<TReq>
+ * @template TRes extends Message<TRes>
  */
 Service.prototype.rpcCall = function rpcCall(method, requestCtor, responseCtor, request, callback) {
 
@@ -1495,11 +1516,11 @@ Service.prototype.end = function end(endedByRPC) {
     return this;
 };
 
-},{"14":14}],13:[function(require,module,exports){
+},{"15":15}],14:[function(require,module,exports){
 "use strict";
 module.exports = LongBits;
 
-var util = require(14);
+var util = require(15);
 
 /**
  * Constructs new long bits.
@@ -1697,7 +1718,7 @@ LongBits.prototype.length = function length() {
          : part2 < 128 ? 9 : 10;
 };
 
-},{"14":14}],14:[function(require,module,exports){
+},{"15":15}],15:[function(require,module,exports){
 "use strict";
 var util = exports;
 
@@ -1723,7 +1744,7 @@ util.utf8 = require(7);
 util.pool = require(6);
 
 // utility to work with the low and high bits of a 64 bit value
-util.LongBits = require(13);
+util.LongBits = require(14);
 
 /**
  * An immuable empty array.
@@ -1799,16 +1820,16 @@ util.isSet = function isSet(obj, prop) {
     return false;
 };
 
-/*
+/**
  * Any compatible Buffer instance.
  * This is a minimal stand-alone definition of a Buffer instance. The actual type is that exported by node's typings.
- * @typedef Buffer
- * @type {Uint8Array}
+ * @interface Buffer
+ * @extends Uint8Array
  */
 
 /**
  * Node's Buffer class if available.
- * @type {?function(new: Buffer)}
+ * @type {Constructor<Buffer>}
  */
 util.Buffer = (function() {
     try {
@@ -1821,23 +1842,10 @@ util.Buffer = (function() {
     }
 })();
 
-/**
- * Internal alias of or polyfull for Buffer.from.
- * @type {?function}
- * @param {string|number[]} value Value
- * @param {string} [encoding] Encoding if value is a string
- * @returns {Uint8Array}
- * @private
- */
+// Internal alias of or polyfull for Buffer.from.
 util._Buffer_from = null;
 
-/**
- * Internal alias of or polyfill for Buffer.allocUnsafe.
- * @type {?function}
- * @param {number} size Buffer size
- * @returns {Uint8Array}
- * @private
- */
+// Internal alias of or polyfill for Buffer.allocUnsafe.
 util._Buffer_allocUnsafe = null;
 
 /**
@@ -1860,15 +1868,14 @@ util.newBuffer = function newBuffer(sizeOrArray) {
 
 /**
  * Array implementation used in the browser. `Uint8Array` if supported, otherwise `Array`.
- * @type {?function(new: Uint8Array, *)}
+ * @type {Constructor<Uint8Array>}
  */
 util.Array = typeof Uint8Array !== "undefined" ? Uint8Array /* istanbul ignore next */ : Array;
 
-/*
+/**
  * Any compatible Long instance.
  * This is a minimal stand-alone definition of a Long instance. The actual type is that exported by long.js.
- * @typedef Long
- * @type {Object}
+ * @interface Long
  * @property {number} low Low bits
  * @property {number} high High bits
  * @property {boolean} unsigned Whether unsigned or not
@@ -1876,7 +1883,7 @@ util.Array = typeof Uint8Array !== "undefined" ? Uint8Array /* istanbul ignore n
 
 /**
  * Long.js's Long class if available.
- * @type {?function(new: Long)}
+ * @type {Constructor<Long>}
  */
 util.Long = /* istanbul ignore next */ global.dcodeIO && /* istanbul ignore next */ global.dcodeIO.Long || util.inquire("long");
 
@@ -1955,7 +1962,7 @@ util.lcFirst = function lcFirst(str) {
  * Creates a custom error constructor.
  * @memberof util
  * @param {string} name Error name
- * @returns {function} Custom error constructor
+ * @returns {Constructor<Error>} Custom error constructor
  */
 function newError(name) {
 
@@ -1997,9 +2004,10 @@ util.newError = newError;
  * @classdesc Error subclass indicating a protocol specifc error.
  * @memberof util
  * @extends Error
+ * @template T extends Message<T>
  * @constructor
  * @param {string} message Error message
- * @param {Object.<string,*>=} properties Additional properties
+ * @param {Object.<string,*>} [properties] Additional properties
  * @example
  * try {
  *     MyMessage.decode(someBuffer); // throws if required fields are missing
@@ -2013,13 +2021,20 @@ util.ProtocolError = newError("ProtocolError");
 /**
  * So far decoded message instance.
  * @name util.ProtocolError#instance
- * @type {Message}
+ * @type {Message<T>}
+ */
+
+/**
+ * A OneOf getter as returned by {@link util.oneOfGetter}.
+ * @typedef OneOfGetter
+ * @type {function}
+ * @returns {string|undefined} Set field name, if any
  */
 
 /**
  * Builds a getter for a oneof's present field name.
  * @param {string[]} fieldNames Field names
- * @returns {function():string|undefined} Unbound getter
+ * @returns {OneOfGetter} Unbound getter
  */
 util.oneOfGetter = function getOneOf(fieldNames) {
     var fieldMap = {};
@@ -2039,9 +2054,17 @@ util.oneOfGetter = function getOneOf(fieldNames) {
 };
 
 /**
+ * A OneOf setter as returned by {@link util.oneOfSetter}.
+ * @typedef OneOfSetter
+ * @type {function}
+ * @param {string|undefined} value Field name
+ * @returns {undefined}
+ */
+
+/**
  * Builds a setter for a oneof's present field name.
  * @param {string[]} fieldNames Field names
- * @returns {function(?string):undefined} Unbound setter
+ * @returns {OneOfSetter} Unbound setter
  */
 util.oneOfSetter = function setOneOf(fieldNames) {
 
@@ -2058,34 +2081,27 @@ util.oneOfSetter = function setOneOf(fieldNames) {
     };
 };
 
-/* istanbul ignore next */
 /**
- * Lazily resolves fully qualified type names against the specified root.
- * @param {Root} root Root instanceof
- * @param {Object.<number,string|ReflectionObject>} lazyTypes Type names
- * @returns {undefined}
- * @deprecated since 6.7.0 static code does not emit lazy types anymore
- */
-util.lazyResolve = function lazyResolve(root, lazyTypes) {
-    for (var i = 0; i < lazyTypes.length; ++i) {
-        for (var keys = Object.keys(lazyTypes[i]), j = 0; j < keys.length; ++j) {
-            var path = lazyTypes[i][keys[j]].split("."),
-                ptr  = root;
-            while (path.length)
-                ptr = ptr[path.shift()];
-            lazyTypes[i][keys[j]] = ptr;
-        }
-    }
-};
-
-/**
- * Default conversion options used for {@link Message#toJSON} implementations. Longs, enums and bytes are converted to strings by default.
- * @type {ConversionOptions}
+ * Default conversion options used for {@link Message#toJSON} implementations.
+ *
+ * These options are close to proto3's JSON mapping with the exception that internal types like Any are handled just like messages. More precisely:
+ *
+ * - Longs become strings
+ * - Enums become string keys
+ * - Bytes become base64 encoded strings
+ * - (Sub-)Messages become plain objects
+ * - Maps become plain objects with all string keys
+ * - Repeated fields become arrays
+ * - NaN and Infinity for float and double fields become strings
+ *
+ * @type {IConversionOptions}
+ * @see https://developers.google.com/protocol-buffers/docs/proto3?hl=en#json
  */
 util.toJSONOptions = {
     longs: String,
     enums: String,
-    bytes: String
+    bytes: String,
+    json: true
 };
 
 util._configure = function() {
@@ -2109,11 +2125,11 @@ util._configure = function() {
         };
 };
 
-},{"1":1,"13":13,"2":2,"3":3,"4":4,"5":5,"6":6,"7":7}],15:[function(require,module,exports){
+},{"1":1,"14":14,"2":2,"3":3,"4":4,"5":5,"6":6,"7":7}],16:[function(require,module,exports){
 "use strict";
 module.exports = Writer;
 
-var util      = require(14);
+var util      = require(15);
 
 var BufferWriter; // cyclic
 
@@ -2166,7 +2182,6 @@ function noop() {} // eslint-disable-line no-empty-function
  * @memberof Writer
  * @constructor
  * @param {Writer} writer Writer to copy state from
- * @private
  * @ignore
  */
 function State(writer) {
@@ -2191,7 +2206,7 @@ function State(writer) {
 
     /**
      * Next state.
-     * @type {?State}
+     * @type {State|null}
      */
     this.next = writer.states;
 }
@@ -2223,7 +2238,7 @@ function Writer() {
 
     /**
      * Linked forked states.
-     * @type {?Object}
+     * @type {Object|null}
      */
     this.states = null;
 
@@ -2270,8 +2285,9 @@ if (util.Array !== Array)
  * @param {number} len Value byte length
  * @param {number} val Value to write
  * @returns {Writer} `this`
+ * @private
  */
-Writer.prototype.push = function push(fn, len, val) {
+Writer.prototype._push = function push(fn, len, val) {
     this.tail = this.tail.next = new Op(fn, len, val);
     this.len += len;
     return this;
@@ -2334,7 +2350,7 @@ Writer.prototype.uint32 = function write_uint32(value) {
  */
 Writer.prototype.int32 = function write_int32(value) {
     return value < 0
-        ? this.push(writeVarint64, 10, LongBits.fromNumber(value)) // 10 bytes per spec
+        ? this._push(writeVarint64, 10, LongBits.fromNumber(value)) // 10 bytes per spec
         : this.uint32(value);
 };
 
@@ -2368,7 +2384,7 @@ function writeVarint64(val, buf, pos) {
  */
 Writer.prototype.uint64 = function write_uint64(value) {
     var bits = LongBits.from(value);
-    return this.push(writeVarint64, bits.length(), bits);
+    return this._push(writeVarint64, bits.length(), bits);
 };
 
 /**
@@ -2388,7 +2404,7 @@ Writer.prototype.int64 = Writer.prototype.uint64;
  */
 Writer.prototype.sint64 = function write_sint64(value) {
     var bits = LongBits.from(value).zzEncode();
-    return this.push(writeVarint64, bits.length(), bits);
+    return this._push(writeVarint64, bits.length(), bits);
 };
 
 /**
@@ -2397,7 +2413,7 @@ Writer.prototype.sint64 = function write_sint64(value) {
  * @returns {Writer} `this`
  */
 Writer.prototype.bool = function write_bool(value) {
-    return this.push(writeByte, 1, value ? 1 : 0);
+    return this._push(writeByte, 1, value ? 1 : 0);
 };
 
 function writeFixed32(val, buf, pos) {
@@ -2413,7 +2429,7 @@ function writeFixed32(val, buf, pos) {
  * @returns {Writer} `this`
  */
 Writer.prototype.fixed32 = function write_fixed32(value) {
-    return this.push(writeFixed32, 4, value >>> 0);
+    return this._push(writeFixed32, 4, value >>> 0);
 };
 
 /**
@@ -2432,7 +2448,7 @@ Writer.prototype.sfixed32 = Writer.prototype.fixed32;
  */
 Writer.prototype.fixed64 = function write_fixed64(value) {
     var bits = LongBits.from(value);
-    return this.push(writeFixed32, 4, bits.lo).push(writeFixed32, 4, bits.hi);
+    return this._push(writeFixed32, 4, bits.lo)._push(writeFixed32, 4, bits.hi);
 };
 
 /**
@@ -2451,7 +2467,7 @@ Writer.prototype.sfixed64 = Writer.prototype.fixed64;
  * @returns {Writer} `this`
  */
 Writer.prototype.float = function write_float(value) {
-    return this.push(util.float.writeFloatLE, 4, value);
+    return this._push(util.float.writeFloatLE, 4, value);
 };
 
 /**
@@ -2461,7 +2477,7 @@ Writer.prototype.float = function write_float(value) {
  * @returns {Writer} `this`
  */
 Writer.prototype.double = function write_double(value) {
-    return this.push(util.float.writeDoubleLE, 8, value);
+    return this._push(util.float.writeDoubleLE, 8, value);
 };
 
 var writeBytes = util.Array.prototype.set
@@ -2482,13 +2498,13 @@ var writeBytes = util.Array.prototype.set
 Writer.prototype.bytes = function write_bytes(value) {
     var len = value.length >>> 0;
     if (!len)
-        return this.push(writeByte, 1, 0);
+        return this._push(writeByte, 1, 0);
     if (util.isString(value)) {
         var buf = Writer.alloc(len = base64.length(value));
         base64.decode(value, buf, 0);
         value = buf;
     }
-    return this.uint32(len).push(writeBytes, len, value);
+    return this.uint32(len)._push(writeBytes, len, value);
 };
 
 /**
@@ -2499,8 +2515,8 @@ Writer.prototype.bytes = function write_bytes(value) {
 Writer.prototype.string = function write_string(value) {
     var len = utf8.length(value);
     return len
-        ? this.uint32(len).push(utf8.write, len, value)
-        : this.push(writeByte, 1, 0);
+        ? this.uint32(len)._push(utf8.write, len, value)
+        : this._push(writeByte, 1, 0);
 };
 
 /**
@@ -2570,15 +2586,15 @@ Writer._configure = function(BufferWriter_) {
     BufferWriter = BufferWriter_;
 };
 
-},{"14":14}],16:[function(require,module,exports){
+},{"15":15}],17:[function(require,module,exports){
 "use strict";
 module.exports = BufferWriter;
 
 // extends Writer
-var Writer = require(15);
+var Writer = require(16);
 (BufferWriter.prototype = Object.create(Writer.prototype)).constructor = BufferWriter;
 
-var util = require(14);
+var util = require(15);
 
 var Buffer = util.Buffer;
 
@@ -2623,7 +2639,7 @@ BufferWriter.prototype.bytes = function write_bytes_buffer(value) {
     var len = value.length >>> 0;
     this.uint32(len);
     if (len)
-        this.push(writeBytesBuffer, len, value);
+        this._push(writeBytesBuffer, len, value);
     return this;
 };
 
@@ -2641,7 +2657,7 @@ BufferWriter.prototype.string = function write_string_buffer(value) {
     var len = Buffer.byteLength(value);
     this.uint32(len);
     if (len)
-        this.push(writeStringBuffer, len, value);
+        this._push(writeStringBuffer, len, value);
     return this;
 };
 
@@ -2653,7 +2669,7 @@ BufferWriter.prototype.string = function write_string_buffer(value) {
  * @returns {Buffer} Finished buffer
  */
 
-},{"14":14,"15":15}]},{},[8])
+},{"15":15,"16":16}]},{},[8])
 
 })(typeof window==="object"&&window||typeof self==="object"&&self||this);
 //# sourceMappingURL=protobuf.js.map

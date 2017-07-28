@@ -15,8 +15,7 @@ Contents
   A brief introduction to using the toolset.
 
   * [Valid Message](#valid-message)
-  * [Toolset](#toolset)
-
+  * [Toolset](#toolset)<br />
 
 * [Examples](#examples)<br />
   A few examples to get you started.
@@ -26,8 +25,7 @@ Contents
   * [Using reflection only](#using-reflection-only)
   * [Using custom classes](#using-custom-classes)
   * [Using services](#using-services)
-  * [Usage with TypeScript](#usage-with-typescript)
-
+  * [Usage with TypeScript](#usage-with-typescript)<br />
 
 * [Command line](#command-line)<br />
   How to use the command line utility.
@@ -35,8 +33,7 @@ Contents
   * [pbjs for JavaScript](#pbjs-for-javascript)
   * [pbts for TypeScript](#pbts-for-typescript)
   * [Reflection vs. static code](#reflection-vs-static-code)
-  * [Command line API](#command-line-api)
-
+  * [Command line API](#command-line-api)<br />
 
 * [Additional documentation](#additional-documentation)<br />
   A list of available documentation resources.
@@ -121,7 +118,7 @@ In a nutshell, the wire format writer understands the following types:
 
 | Field type | Expected JS type (create, encode) | Conversion (fromObject)
 |------------|-----------------------------------|------------------------
-| s-/u-/int32<br />s-/fixed32 | `number` (32 bit integer) | `value | 0` if signed<br />`value >>> 0` if unsigned
+| s-/u-/int32<br />s-/fixed32 | `number` (32 bit integer) | <code>value &#124; 0</code> if signed<br />`value >>> 0` if unsigned
 | s-/u-/int64<br />s-/fixed64 | `Long`-like (optimal)<br />`number` (53 bit integer) | `Long.fromValue(value)` with long.js<br />`parseInt(value, 10)` otherwise
 | float<br />double | `number` | `Number(value)`
 | bool | `boolean` | `Boolean(value)`
@@ -249,7 +246,7 @@ protobuf.load("awesome.proto", function(err, root) {
         throw Error(errMsg);
 
     // Create a new message
-    var message = AwesomeMessage.creeate(payload); // or use .fromObject if conversion is necessary
+    var message = AwesomeMessage.create(payload); // or use .fromObject if conversion is necessary
 
     // Encode a message to an Uint8Array (browser) or Buffer (node)
     var buffer = AwesomeMessage.encode(message).finish();
@@ -466,18 +463,18 @@ Note that the service API is meant for clients. Implementing a server-side endpo
 
 ### Usage with TypeScript
 
-The library ships with its own [type definitions](https://github.com/dcodeIO/protobuf.js/blob/master/index.d.ts) and modern editors like [Visual Studio Code](https://code.visualstudio.com/) should automatically detect and use them for code completion when following this pattern:
+The library ships with its own [type definitions](https://github.com/dcodeIO/protobuf.js/blob/master/index.d.ts) and modern editors like [Visual Studio Code](https://code.visualstudio.com/) will automatically detect and use them for code completion.
+
+The npm package depends on [@types/node](https://www.npmjs.com/package/@types/node) because of `Buffer` and [@types/long](https://www.npmjs.com/package/@types/long) because of `Long`. If you are not building for node and/or not using long.js, it should be safe to exclude them manually.
+
+#### Using the JS API
+
+The API shown above works pretty much the same with TypeScript. However, because everything is typed, accessing fields on instances of dynamically generated message classes requires either using bracket-notation (i.e. `message["awesomeField"]`) or explicit casts. Alternatively, it is possible to use a [typings file generated for its static counterpart](#pbts-for-typescript).
 
 ```ts
-// node.js
-import * as protobuf from "protobufjs";
-import * as Long from "long"; // optional
+import { load } from "protobufjs"; // respectively "./node_modules/protobufjs"
 
-// browser only (alternatively)
-// import * as protobuf from "./node_modules/protobufjs/index.js";
-// import * as Long from "./node_modules/long/dist/long.js"; // optional
-
-protobuf.load("awesome.proto", function(err, root) {
+load("awesome.proto", function(err, root) {
   if (err)
     throw err;
 
@@ -495,28 +492,85 @@ protobuf.load("awesome.proto", function(err, root) {
 });
 ```
 
-**Note:** Dynamically generated message classes cannot be typed, technically, so you must either access its fields using `message["awesomeField"]` notation or you can utilize [typings of its static counterpart](#pbts-for-typescript) for full typings support.
+#### Using generated static code
 
-If you generated static code to `bundle.js` using the CLI and its type definitions to `bundle.d.ts` instead, then you can just do:
+If you generated static code to `bundle.js` using the CLI and its type definitions to `bundle.d.ts`, then you can just do:
 
 ```ts
-import * as root from "./bundle.js";
+import { AwesomeMessage } from "./bundle.js";
 
 // example code
-var AwesomeMessage = root.AwesomeMessage;
-var message = AwesomeMessage.create({ awesomeField: "hello" });
-var buffer = AwesomeMessage.encode(message).finish();
-...
+let message = AwesomeMessage.create({ awesomeField: "hello" });
+let buffer  = AwesomeMessage.encode(message).finish();
+let decoded = AwesomeMessage.decode(buffer);
 ```
 
-**Note** that the npm package depends on [@types/node](https://www.npmjs.com/package/@types/node) because of `Buffer` and [@types/long](https://www.npmjs.com/package/@types/long) because of `Long`.
+#### Using decorators
 
-If you are not building for node and/or not using long.js and want to exclude their full type definitions manually for whatever reason, there are two stubs available that can be referenced instead of the respective full type definition:
+The library also includes an early implementation of [decorators](https://www.typescriptlang.org/docs/handbook/decorators.html).
+
+**Note** that decorators are an experimental feature in TypeScript and that declaration order is important depending on the JS target. For example, `@Field.d(2, AwesomeArrayMessage)` requires that `AwesomeArrayMessage` has been defined earlier when targeting `ES5`.
 
 ```ts
-/// <reference path="./node_modules/protobufjs/stub-long.d.ts" />
-/// <reference path="./node_modules/protobufjs/stub-node.d.ts" />
+import { Message, Type, Field, OneOf } from "protobufjs/light"; // respectively "./node_modules/protobufjs/light.js"
+
+export class AwesomeSubMessage extends Message<AwesomeSubMessage> {
+
+  @Field.d(1, "string")
+  public awesomeString: string;
+
+}
+
+export enum AwesomeEnum {
+  ONE = 1,
+  TWO = 2
+}
+
+@Type.d("SuperAwesomeMessage")
+export class AwesomeMessage extends Message<AwesomeMessage> {
+
+  @Field.d(1, "string", "optional", "awesome default string")
+  public awesomeField: string;
+
+  @Field.d(2, AwesomeSubMessage)
+  public awesomeSubMessage: AwesomeSubMessage;
+
+  @Field.d(3, AwesomeEnum, "optional", AwesomeEnum.ONE)
+  public awesomeEnum: AwesomeEnum;
+
+  @OneOf.d("awesomeSubMessage", "awesomeEnum")
+  public which: string;
+
+}
+
+// example code
+let message = new AwesomeMessage({ awesomeField: "hello" });
+let buffer  = AwesomeMessage.encode(message).finish();
+let decoded = AwesomeMessage.decode(buffer);
 ```
+
+Supported decorators are:
+
+* **Type.d(typeName?: `string`)** &nbsp; *(optional)*<br />
+  annotates a class as a protobuf message type. If `typeName` is not specified, the constructor's runtime function name is used for the reflected type.
+
+* **Field.d&lt;T>(fieldId: `number`, fieldType: `string | Constructor<T>`, fieldRule?: `"optional" | "required" | "repeated"`, defaultValue?: `T`)**<br />
+  annotates a property as a protobuf field with the specified id and protobuf type.
+
+* **MapField.d&lt;T extends { [key: string]: any }>(fieldId: `number`, fieldKeyType: `string`, fieldValueType. `string | Constructor<{}>`)**<br />
+  annotates a property as a protobuf map field with the specified id, protobuf key and value type.
+
+* **OneOf.d&lt;T extends string>(...fieldNames: `string[]`)**<br />
+  annotates a property as a protobuf oneof covering the specified fields.
+
+Other notes:
+
+* Decorated types reside in `protobuf.roots["decorated"]` using a flat structure, so no duplicate names.
+* Enums are copied to a reflected enum with a generic name on decorator evaluation because referenced enum objects have no runtime name the decorator could use.
+* Default values must be specified as arguments to the decorator instead of using a property initializer for proper prototype behavior.
+* Property names on decorated classes must not be renamed on compile time (i.e. by a minifier) because decorators just receive the original field name as a string.
+
+**ProTip!** Not as pretty, but you can [use decorators in plain JavaScript](https://github.com/dcodeIO/protobuf.js/blob/master/examples/js-decorators.js) as well.
 
 Command line
 ------------
@@ -532,12 +586,12 @@ Translates between file formats and generates static code.
 
   -t, --target     Specifies the target format. Also accepts a path to require a custom target.
 
-                  json          JSON representation
-                  json-module   JSON representation as a module
-                  proto2        Protocol Buffers, Version 2
-                  proto3        Protocol Buffers, Version 3
-                  static        Static code without reflection (non-functional on its own)
-                  static-module Static code without reflection as a module
+                   json          JSON representation
+                   json-module   JSON representation as a module
+                   proto2        Protocol Buffers, Version 2
+                   proto3        Protocol Buffers, Version 3
+                   static        Static code without reflection (non-functional on its own)
+                   static-module Static code without reflection as a module
 
   -p, --path       Adds a directory to the include path.
 
@@ -545,7 +599,7 @@ Translates between file formats and generates static code.
 
   --sparse         Exports only those types referenced from a main file (experimental).
 
-   Module targets only:
+  Module targets only:
 
   -w, --wrap       Specifies the wrapper to use. Also accepts a path to require a custom wrapper.
 
@@ -553,6 +607,7 @@ Translates between file formats and generates static code.
                    commonjs  CommonJS wrapper
                    amd       AMD wrapper
                    es6       ES6 wrapper (implies --es6)
+                   closure   A closure adding to protobuf.roots where protobuf is a global
 
   -r, --root       Specifies an alternative protobuf.roots name.
 
@@ -562,11 +617,11 @@ Translates between file formats and generates static code.
 
   --es6            Enables ES6 syntax (const/let instead of var)
 
-   Proto sources only:
+  Proto sources only:
 
   --keep-case      Keeps field casing instead of converting to camel case.
 
-   Static targets only:
+  Static targets only:
 
   --no-create      Does not generate create functions used for reflection compatibility.
   --no-encode      Does not generate encode functions.
@@ -580,7 +635,7 @@ Translates between file formats and generates static code.
   --force-long     Enfores the use of 'Long' for s-/u-/int64 and s-/fixed64 fields.
   --force-message  Enfores the use of message instances instead of plain objects.
 
-usage: pbjs [options] file1.proto file2.json ...  (or)  other | pbjs [options] -
+usage: pbjs [options] file1.proto file2.json ...  (or pipe)  other | pbjs [options] -
 ```
 
 For production environments it is recommended to bundle all your .proto files to a single .json file, which minimizes the number of network requests and avoids any parser overhead (hint: works with just the **light** library):
@@ -774,6 +829,7 @@ Compatibility
 * Support for pre-ES5 environments (except IE8) can be achieved by [using a polyfill](https://github.com/dcodeIO/protobuf.js/blob/master/scripts/polyfill.js).
 * Support for [Content Security Policy](https://w3c.github.io/webappsec-csp/)-restricted environments (like Chrome extensions without [unsafe-eval](https://developer.chrome.com/extensions/contentSecurityPolicy#relaxing-eval)) can be achieved by generating and using static code instead.
 * If a proper way to work with 64 bit values (uint64, int64 etc.) is required, just install [long.js](https://github.com/dcodeIO/long.js) alongside this library. All 64 bit numbers will then be returned as a `Long` instance instead of a possibly unsafe JavaScript number ([see](https://github.com/dcodeIO/long.js)).
+* For descriptor.proto interoperability, see [ext/descriptor](https://github.com/dcodeIO/protobuf.js/tree/master/ext/descriptor)
 
 Building
 --------

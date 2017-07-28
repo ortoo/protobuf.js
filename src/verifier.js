@@ -25,14 +25,18 @@ function genVerifyValue(gen, field, fieldIndex, ref) {
                 ("default:")
                     ("return%j", invalid(field, "enum value"));
             for (var keys = Object.keys(field.resolvedType.values), j = 0; j < keys.length; ++j) gen
-                ("case %d:", field.resolvedType.values[keys[j]]);
+                ("case %i:", field.resolvedType.values[keys[j]]);
             gen
                     ("break")
             ("}");
-        } else gen
-            ("var e=types[%d].verify(%s);", fieldIndex, ref)
-            ("if(e)")
-                ("return%j+e", field.name + ".");
+        } else {
+            gen
+            ("{")
+                ("var e=types[%i].verify(%s);", fieldIndex, ref)
+                ("if(e)")
+                    ("return%j+e", field.name + ".")
+            ("}");
+        }
     } else {
         switch (field.type) {
             case "int32":
@@ -118,7 +122,7 @@ function genVerifyKey(gen, field, ref) {
 function verifier(mtype) {
     /* eslint-disable no-unexpected-multiline */
 
-    var gen = util.codegen("m")
+    var gen = util.codegen(["m"], mtype.name + "$verify")
     ("if(typeof m!==\"object\"||m===null)")
         ("return%j", "object expected");
     var oneofs = mtype.oneofsArray,

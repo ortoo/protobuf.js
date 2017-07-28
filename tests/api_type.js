@@ -3,13 +3,7 @@ var tape = require("tape");
 var protobuf = require("..");
 
 var def = {
-    fields: {},
-    oneofs: undefined,
-    extensions: undefined,
-    reserved: undefined,
-    group: undefined,
-    nested: undefined,
-    options: undefined,
+    fields: {}
 };
 
 var def2 = {
@@ -55,7 +49,7 @@ tape.test("reflected types", function(test) {
     MyMessageManual.prototype = Object.create(protobuf.Message.prototype);
     type.ctor = MyMessageManual;
     test.ok(MyMessageManual.prototype instanceof protobuf.Message, "should properly register a constructor through assignment if already extending message");
-    test.notOk(typeof MyMessageManual.encode === "function", "should not populate static methods on assigned constructors if already extending message");
+    test.ok(typeof MyMessageManual.encode === "function", "should populate static methods on assigned constructors");
 
     type = protobuf.Type.fromJSON("My", {
         fields: {
@@ -75,20 +69,16 @@ tape.test("reflected types", function(test) {
     });
     test.same(type.toJSON(), {
         fields: {
-            a: { extend: undefined, id: 1, options: undefined, rule: undefined, type: "string" }
+            a: { id: 1, type: "string" }
         },
-        oneofs: undefined,
-        extensions: undefined,
         reserved: [[900, 999], "b"],
-        group: undefined,
         nested: {
-            Type: { extensions: undefined, fields: {}, group: undefined, nested: undefined, oneofs: undefined, options: undefined, reserved: undefined },
-            Enum: { options: undefined, values: {} },
-            Service: { methods: {}, nested: undefined, options: undefined },
-            extensionField: { extend: "Message", id: 1000, options: undefined, rule: undefined, type: "string" },
-            Other: { nested: undefined, options: undefined }
-        },
-        options: undefined
+            Type: { fields: {} },
+            Enum: { values: {} },
+            Service: { methods: {} },
+            extensionField: { extend: "Message", id: 1000, type: "string" },
+            Other: { }
+        }
     }, "should create from Field, Type, Enum, Service, extension Field and Namespace JSON");
 
     test.throws(function() {

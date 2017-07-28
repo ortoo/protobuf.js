@@ -77,20 +77,20 @@ function Method(name, type, requestType, responseType, requestStream, responseSt
 
     /**
      * Resolved request type.
-     * @type {?Type}
+     * @type {Type|null}
      */
     this.resolvedRequestType = null;
 
     /**
      * Resolved response type.
-     * @type {?Type}
+     * @type {Type|null}
      */
     this.resolvedResponseType = null;
 }
 
 /**
- * @typedef MethodDescriptor
- * @type {Object}
+ * Method descriptor.
+ * @interface IMethod
  * @property {string} [type="rpc"] Method type
  * @property {string} requestType Request type
  * @property {string} responseType Response type
@@ -102,7 +102,7 @@ function Method(name, type, requestType, responseType, requestStream, responseSt
 /**
  * Constructs a method from a method descriptor.
  * @param {string} name Method name
- * @param {MethodDescriptor} json Method descriptor
+ * @param {IMethod} json Method descriptor
  * @returns {Method} Created method
  * @throws {TypeError} If arguments are invalid
  */
@@ -112,17 +112,17 @@ Method.fromJSON = function fromJSON(name, json) {
 
 /**
  * Converts this method to a method descriptor.
- * @returns {MethodDescriptor} Method descriptor
+ * @returns {IMethod} Method descriptor
  */
 Method.prototype.toJSON = function toJSON() {
-    return {
-        type           : this.type !== "rpc" && /* istanbul ignore next */ this.type || undefined,
-        requestType    : this.requestType,
-        requestStream  : this.requestStream,
-        responseType   : this.responseType,
-        responseStream : this.responseStream,
-        options        : this.options
-    };
+    return util.toObject([
+        "type"           , this.type !== "rpc" && /* istanbul ignore next */ this.type || undefined,
+        "requestType"    , this.requestType,
+        "requestStream"  , this.requestStream,
+        "responseType"   , this.responseType,
+        "responseStream" , this.responseStream,
+        "options"        , this.options
+    ]);
 };
 
 /**

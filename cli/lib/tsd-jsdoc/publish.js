@@ -134,6 +134,39 @@ function writeln() {
     indentWritten = false;
 }
 
+var keepTags = [
+    "param",
+    "returns",
+    "throws",
+    "see"
+];
+
+// parses a comment into text and tags
+function parseComment(comment) {
+    var lines = comment.replace(/^ *\/\*\* *|^ *\*\/| *\*\/ *$|^ *\* */mg, "").trim().split(/\r?\n|\r/g); // property.description has just "\r" ?!
+    var desc;
+    var text = [];
+    var tags = null;
+    for (var i = 0; i < lines.length; ++i) {
+        var match = /^@(\w+)\b/.exec(lines[i]);
+        if (match) {
+            if (!tags) {
+                tags = [];
+                desc = text;
+            }
+            text = [];
+            tags.push({ name: match[1], text: text });
+            lines[i] = lines[i].substring(match[1].length + 1).trim();
+        }
+        if (lines[i].length || text.length)
+            text.push(lines[i]);
+    }
+    return {
+        text: desc || text,
+        tags: tags || []
+    };
+}
+
 // writes a comment
 function writeComment(comment, otherwiseNewline) {
     if (!comment || options.comments === false) {
@@ -141,17 +174,42 @@ function writeComment(comment, otherwiseNewline) {
             writeln();
         return;
     }
-    var first = true;
-    comment.split(/\r?\n/g).forEach(function(line) {
-        line = line.trim().replace(/^\*/, " *");
-        if (line.length) {
-            if (first) {
-                writeln();
-                first = false;
-            }
-            writeln(line);
+    if (typeof comment !== "object")
+        comment = parseComment(comment);
+    comment.tags = comment.tags.filter(function(tag) {
+        return keepTags.indexOf(tag.name) > -1 && (tag.name !== "returns" || tag.text[0] !== "{undefined}");
+    });
+    writeln();
+    if (!comment.tags.length && comment.text.length < 2) {
+        writeln("/** " + comment.text[0] + " */");
+        return;
+    }
+    writeln("/**");
+    comment.text.forEach(function(line) {
+        if (line.length)
+            writeln(" * ", line);
+        else
+            writeln(" *");
+    });
+    comment.tags.forEach(function(tag) {
+        var started = false;
+        if (tag.text.length) {
+            tag.text.forEach(function(line, i) {
+                if (i > 0)
+                    write(" * ");
+                else if (tag.name !== "throws")
+                    line = line.replace(/^\{[^\s]*} ?/, "");
+                if (!line.length)
+                    return;
+                if (!started) {
+                    write(" * @", tag.name, " ");
+                    started = true;
+                }
+                writeln(line);
+            });
         }
     });
+    writeln(" */");
 }
 
 // recursively replaces all occurencies of re's match
@@ -172,12 +230,17 @@ function replaceRecursive(name, re, fn) {
 
 // tests if an element is considered to be a class or class-like
 function isClassLike(element) {
-    return element && (element.kind === "class" || element.kind === "interface" || element.kind === "mixin");
+    return isClass(element) || isInterface(element);
+}
+
+// tests if an element is considered to be a class
+function isClass(element) {
+    return element && element.kind === "class";
 }
 
 // tests if an element is considered to be an interface
 function isInterface(element) {
-    return element && element.kind === "interface";
+    return element && (element.kind === "interface" || element.kind === "mixin");
 }
 
 // tests if an element is considered to be a namespace
@@ -195,6 +258,8 @@ function getChildrenOf(parent) {
 
 // gets the literal type of an element
 function getTypeOf(element) {
+    if (element.tsType)
+        return element.tsType;
     var name = "any";
     var type = element.type;
     if (type && type.names && type.names.length) {
@@ -211,9 +276,9 @@ function getTypeOf(element) {
     // Ensure upper case Object for map expressions below
     name = name.replace(/\bobject\b/g, "Object");
 
-    // Correct Promise.<Something> to Promise<Something>
-    name = replaceRecursive(name, /\bPromise\.<([^>]*)>/gi, function($0, $1) {
-        return "Promise<" + $1 + ">";
+    // Correct Something.<Something> to Something<Something>
+    name = replaceRecursive(name, /\b(?!Object|Array)([\w$]+)\.<([^>]*)>/gi, function($0, $1, $2) {
+        return $1 + "<" + $2 + ">";
     });
 
     // Replace Array.<string> with string[]
@@ -226,20 +291,34 @@ function getTypeOf(element) {
         return "{ [k: " + $1 + "]: " + $2 + " }";
     });
 
-    // Replace functions (there are no signatures) with () => any
-    name = name.replace(/\bfunction(?:\(\))?([^\w]|$)/gi, "() => any");
+    // Replace functions (there are no signatures) with Function
+    name = name.replace(/\bfunction(?:\(\))?\b/g, "Function");
 
     // Convert plain Object back to just object
-    if (name === "Object")
-        name = "object";
+    name = name.replace(/\b(Object(?!\.))/g, function($0, $1) {
+        return $1.toLowerCase();
+    });
 
     return name;
 }
 
 // begins writing the definition of the specified element
 function begin(element, is_interface) {
-    writeComment(element.comment, is_interface || isInterface(element) || isClassLike(element) || isNamespace(element) || element.isEnum);
-    if (element.scope !== "global" || options.module || is_interface || isInterface(element))
+    if (!seen[element.longname]) {
+        if (isClass(element)) {
+            var comment = parseComment(element.comment);
+            var classdesc = comment.tags.find(function(tag) { return tag.name === "classdesc"; });
+            if (classdesc) {
+                comment.text = classdesc.text;
+                comment.tags = [];
+            }
+            writeComment(comment, true);
+        } else
+            writeComment(element.comment, is_interface || isClassLike(element) || isNamespace(element) || element.isEnum || element.scope === "global");
+        seen[element.longname] = element;
+    } else
+        writeln();
+    if (element.scope !== "global" || options.module)
         return;
     write("export ");
 }
@@ -308,13 +387,18 @@ function writeInterface(element) {
 function writeInterfaceBody(element) {
     writeln("{");
     ++indent;
-    element.properties.forEach(writeProperty);
+    if (element.tsType)
+        writeln(element.tsType);
+    else if (element.properties && element.properties.length)
+        element.properties.forEach(writeProperty);
     --indent;
     write("}");
 }
 
-function writeProperty(property) {
-    writeComment(property.comment);
+function writeProperty(property, declare) {
+    writeComment(property.description);
+    if (declare)
+        write("let ");
     write(property.name);
     if (property.optional)
         write("?");
@@ -326,7 +410,10 @@ function writeProperty(property) {
 //
 
 // handles a single element of any understood type
-function handleElement(element, parent, insideClass) {
+function handleElement(element, parent) {
+    if (element.scope === "inner")
+        return false;
+
     if (element.optional !== true && element.type && element.type.names && element.type.names.length) {
         for (var i = 0; i < element.type.names.length; i++) {
             if (element.type.names[i].toLowerCase() === "undefined") {
@@ -341,29 +428,21 @@ function handleElement(element, parent, insideClass) {
 
     if (seen[element.longname])
         return true;
-    if (isClassLike(element)) {
-        if (insideClass)
-            return false;
+    if (isClassLike(element))
         handleClass(element, parent);
-    } else switch (element.kind) {
+    else switch (element.kind) {
         case "module":
         case "namespace":
-            if (insideClass)
-                return false;
             handleNamespace(element, parent);
             break;
         case "constant":
         case "member":
-            if (insideClass && element.isEnum)
-                return false;
             handleMember(element, parent);
             break;
         case "function":
             handleFunction(element, parent);
             break;
         case "typedef":
-            if (insideClass)
-                return false;
             handleTypeDef(element, parent);
             break;
         case "package":
@@ -375,21 +454,43 @@ function handleElement(element, parent, insideClass) {
 
 // handles (just) a namespace
 function handleNamespace(element/*, parent*/) {
-    begin(element);
-    writeln("namespace ", element.name, " {");
-    ++indent;
-    getChildrenOf(element).forEach(function(child) {
+    var children = getChildrenOf(element);
+    if (!children.length)
+        return;
+    var first = true;
+    if (element.properties)
+        element.properties.forEach(function(property) {
+            if (!/^[$\w]+$/.test(property.name)) // incompatible in namespace
+                return;
+            if (first) {
+                begin(element);
+                writeln("namespace ", element.name, " {");
+                ++indent;
+                first = false;
+            }
+            writeProperty(property, true);
+        });
+    children.forEach(function(child) {
+        if (child.scope === "inner" || seen[child.longname])
+            return;
+        if (first) {
+            begin(element);
+            writeln("namespace ", element.name, " {");
+            ++indent;
+            first = false;
+        }
         handleElement(child, element);
     });
-    --indent;
-    writeln("}");
+    if (!first) {
+        --indent;
+        writeln("}");
+    }
 }
 
 // a filter function to remove any module references
 function notAModuleReference(ref) {
     return ref.indexOf("module:") === -1;
 }
-
 
 // handles a class or class-like
 function handleClass(element, parent) {
@@ -402,7 +503,10 @@ function handleClass(element, parent) {
             write("abstract ");
         write("class ");
     }
-    write(element.name, " ");
+    write(element.name);
+    if (element.templates && element.templates.length)
+        write("<", element.templates.join(", "), ">");
+    write(" ");
 
     // extended classes
     if (element.augments) {
@@ -424,19 +528,27 @@ function handleClass(element, parent) {
     writeln("{");
     ++indent;
 
+    if (element.tsType)
+        writeln(element.tsType);
+
     // constructor
     if (!is_interface && !element.virtual)
         handleFunction(element, parent, true);
 
     // properties
     if (is_interface && element.properties)
-        element.properties.forEach(writeProperty);
+        element.properties.forEach(function(property) {
+            writeProperty(property);
+        });
 
     // class-compatible members
     var incompatible = [];
     getChildrenOf(element).forEach(function(child) {
-        if (!handleElement(child, element, true))
+        if (isClassLike(child) || child.kind === "module" || child.kind === "typedef" || child.isEnum) {
             incompatible.push(child);
+            return;
+        }
+        handleElement(child, element);
     });
 
     --indent;
@@ -462,24 +574,40 @@ function handleMember(element, parent) {
     begin(element);
 
     if (element.isEnum) {
-
-        writeln("enum ", element.name, " {");
-        ++indent;
-        element.properties.forEach(function(property, i) {
-            write(property.name);
-            if (property.defaultvalue !== undefined)
-                write(" = ", JSON.stringify(property.defaultvalue));
-            if (i < element.properties.length - 1)
-                writeln(",");
-            else
-                writeln();
+        var stringEnum = false;
+        element.properties.forEach(function(property) {
+            if (isNaN(property.defaultvalue)) {
+                stringEnum = true;
+            }
         });
-        --indent;
-        writeln("}");
+        if (stringEnum) {
+            writeln("type ", element.name, " =");
+            ++indent;
+            element.properties.forEach(function(property, i) {
+                write(i === 0 ? "" : "| ", JSON.stringify(property.defaultvalue));
+            });
+            --indent;
+            writeln(";");
+        } else {
+            writeln("enum ", element.name, " {");
+            ++indent;
+            element.properties.forEach(function(property, i) {
+                write(property.name);
+                if (property.defaultvalue !== undefined)
+                    write(" = ", JSON.stringify(property.defaultvalue));
+                if (i < element.properties.length - 1)
+                    writeln(",");
+                else
+                    writeln();
+            });
+            --indent;
+            writeln("}");
+        }
 
     } else {
 
-        if (isClassLike(parent)) {
+        var inClass = isClassLike(parent);
+        if (inClass) {
             write(element.access || "public", " ");
             if (element.scope === "static")
                 write("static ");
@@ -508,21 +636,27 @@ function handleMember(element, parent) {
 
 // handles a function or method
 function handleFunction(element, parent, isConstructor) {
+    var insideClass = true;
     if (isConstructor) {
         writeComment(element.comment);
         write("constructor");
     } else {
         begin(element);
-        if (isClassLike(parent)) {
+        insideClass = isClassLike(parent);
+        if (insideClass) {
             write(element.access || "public", " ");
             if (element.scope === "static")
                 write("static ");
         } else
             write("function ");
         write(element.name);
+        if (element.templates && element.templates.length)
+            write("<", element.templates.join(", "), ">");
     }
     writeFunctionSignature(element, isConstructor, false);
     writeln(";");
+    if (!insideClass)
+        handleNamespace(element);
 }
 
 // handles a type definition (not a real type)
@@ -535,20 +669,25 @@ function handleTypeDef(element, parent) {
             writeInterface(element);
         }
     } else {
-        // see: https://github.com/dcodeIO/protobuf.js/issues/737
-        // begin(element, true);
-        writeln();
-        write("type ", element.name, " = ");
-        var type = getTypeOf(element);
-        if (element.type && element.type.names.length === 1 && element.type.names[0] === "function")
-            writeFunctionSignature(element, false, true);
-        else if (type === "object") {
-            if (element.properties && element.properties.length)
-                writeInterfaceBody(element);
-            else
-                write("{}");
-        } else
-            write(type);
+        writeComment(element.comment, true);
+        write("type ", element.name);
+        if (element.templates && element.templates.length)
+            write("<", element.templates.join(", "), ">");
+        write(" = ");
+        if (element.tsType)
+            write(element.tsType);
+        else {
+            var type = getTypeOf(element);
+            if (element.type && element.type.names.length === 1 && element.type.names[0] === "function")
+                writeFunctionSignature(element, false, true);
+            else if (type === "object") {
+                if (element.properties && element.properties.length)
+                    writeInterfaceBody(element);
+                else
+                    write("{}");
+            } else
+                write(type);
+        }
         writeln(";");
     }
 }

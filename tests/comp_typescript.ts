@@ -4,9 +4,10 @@
 /// <reference path="../stub-node.d.ts" />
 */
 
-import * as protobuf from "..";
+import { Root, Message, Type, Field, MapField, OneOf } from "..";
 
-export const proto = {
+// Reflection
+const root = Root.fromJSON({
     nested: {
         Hello: {
             fields: {
@@ -18,28 +19,74 @@ export const proto = {
             }
         }
     }
-};
+});
+const HelloReflected = root.lookupType("Hello");
 
-const root = protobuf.Root.fromJSON(proto);
+HelloReflected.create({ value: "hi" });
 
-export class Hello extends protobuf.Message {
-    constructor (properties?: { [k: string]: any }) {
-        super(properties);
-    }
+// Custom classes
+
+export class Hello extends Message<Hello> {
+
+    public value: string; // for MessageProperties<T> coercion
 
     public foo() {
-        this["value"] = "hi";
+        this.value = "hi";
         return this;
     }
 }
-protobuf.Class.create(root.lookupType("Hello"), Hello);
 
-let hello = new Hello();
+root.lookupType("Hello").ctor = Hello;
 
-let writer = Hello.encode(hello.foo()) as protobuf.BufferWriter;
-let buf = writer.finish();
+Hello.create({ value: "hi" });
+let helloMessage = new Hello({ value: "hi" });
+let helloBuffer  = Hello.encode(helloMessage.foo()).finish();
+let helloDecoded = Hello.decode(helloBuffer);
 
-let hello2 = Hello.decode(buf) as Hello;
-// console.log(JSON.stringify(hello2.foo().toObject(), null, 2));
+// Decorators
 
-export const utf8 = protobuf.util.utf8;
+import "reflect-metadata";
+
+export enum AwesomeEnum {
+  ONE = 1,
+  TWO = 2
+}
+
+export class AwesomeSubMessage extends Message<AwesomeSubMessage> {
+
+  @Field.d(1, "string")
+  public awesomeString: string;
+
+  @MapField.d(2, "string", "string")
+  public awesomeMapString : { [key: string]: string };
+
+  @MapField.d(3, "string", AwesomeEnum)
+  public awesomeMapEnum : { [key: string]: string };
+
+  @MapField.d(4, "string", AwesomeSubMessage)
+  public awesomeMapMessage : { [key: string]: Message<AwesomeSubMessage> };
+
+}
+
+@Type.d("SuperAwesomeMessage")
+export class AwesomeMessage extends Message<AwesomeMessage> {
+
+  @Field.d(1, "string", "optional", "awesome default string")
+  public awesomeField: string;
+
+  @Field.d(2, AwesomeSubMessage)
+  public awesomeSubMessage: AwesomeSubMessage;
+
+  @Field.d(3, AwesomeEnum, "optional", AwesomeEnum.ONE)
+  public awesomeEnum: AwesomeEnum;
+
+  @OneOf.d("awesomeSubMessage", "awesomeEnum")
+  public which: string;
+
+}
+
+let awesomeMessage = new AwesomeMessage({ awesomeField: "hi" });
+let awesomeBuffer  = AwesomeMessage.encode(awesomeMessage).finish();
+let awesomeDecoded = AwesomeMessage.decode(awesomeBuffer);
+
+// test currently consists only of not throwing

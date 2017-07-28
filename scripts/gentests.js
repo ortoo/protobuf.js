@@ -41,20 +41,27 @@ var fs   = require("fs"),
     });
 });
 
+process.stdout.write("\n");
+
 [
-    "tests/data/rpc.js",
-    "tests/data/test.js",
+    { file: "tests/data/comments.js" },
+    { file: "tests/data/convert.js" },
+    { file: "tests/data/mapbox/vector_tile.js" },
+    { file: "tests/data/package.js" },
+    { file: "tests/data/rpc.js" },
+    { file: "tests/data/rpc-es6.js" },
+    { file: "tests/data/test.js" },
+    { file: "ext/descriptor/index.js", ext: true }
 ]
-.forEach(function(file) {
-    var out = file.replace(/\.js$/, ".d.ts");
-    pbts.main([
-        "--no-comments",
-        file
-    ], function(err, output) {
+.forEach(function({ file, ext }) {
+    var out = file.replace(/\.js$/, ".d.ts"),
+        args = [ "--no-comments" ];
+    pbts.main(args.concat(file), function(err, output) {
         if (err)
             throw err;
         var pathToProtobufjs = path.relative(path.dirname(out), "").replace(/\\/g, "/");
-        fs.writeFileSync(out, output.replace(/"protobufjs"/g, JSON.stringify(pathToProtobufjs)));
+        output = output.replace(/"protobufjs"/g, JSON.stringify(pathToProtobufjs));
+        fs.writeFileSync(out, output);
         process.stdout.write("pbts: " + file + " -> " + out + "\n");
     });
 });

@@ -5,7 +5,8 @@ module.exports = OneOf;
 var ReflectionObject = require("./object");
 ((OneOf.prototype = Object.create(ReflectionObject.prototype)).constructor = OneOf).className = "OneOf";
 
-var Field = require("./field");
+var Field = require("./field"),
+    util  = require("./util");
 
 /**
  * Constructs a new oneof instance.
@@ -43,8 +44,7 @@ function OneOf(name, fieldNames, options) {
 
 /**
  * Oneof descriptor.
- * @typedef OneOfDescriptor
- * @type {Object}
+ * @interface IOneOf
  * @property {Array.<string>} oneof Oneof field names
  * @property {Object.<string,*>} [options] Oneof options
  */
@@ -52,7 +52,7 @@ function OneOf(name, fieldNames, options) {
 /**
  * Constructs a oneof from a oneof descriptor.
  * @param {string} name Oneof name
- * @param {OneOfDescriptor} json Oneof descriptor
+ * @param {IOneOf} json Oneof descriptor
  * @returns {OneOf} Created oneof
  * @throws {TypeError} If arguments are invalid
  */
@@ -62,13 +62,13 @@ OneOf.fromJSON = function fromJSON(name, json) {
 
 /**
  * Converts this oneof to a oneof descriptor.
- * @returns {OneOfDescriptor} Oneof descriptor
+ * @returns {IOneOf} Oneof descriptor
  */
 OneOf.prototype.toJSON = function toJSON() {
-    return {
-        oneof   : this.oneof,
-        options : this.options
-    };
+    return util.toObject([
+        "options" , this.options,
+        "oneof"   , this.oneof
+    ]);
 };
 
 /**
@@ -159,4 +159,35 @@ OneOf.prototype.onRemove = function onRemove(parent) {
         if ((field = this.fieldsArray[i]).parent)
             field.parent.remove(field);
     ReflectionObject.prototype.onRemove.call(this, parent);
+};
+
+/**
+ * Decorator function as returned by {@link OneOf.d} (TypeScript).
+ * @typedef OneOfDecorator
+ * @type {function}
+ * @param {Object} prototype Target prototype
+ * @param {string} oneofName OneOf name
+ * @returns {undefined}
+ */
+
+/**
+ * OneOf decorator (TypeScript).
+ * @function
+ * @param {...string} fieldNames Field names
+ * @returns {OneOfDecorator} Decorator function
+ * @template T extends string
+ */
+OneOf.d = function decorateOneOf() {
+    var fieldNames = new Array(arguments.length),
+        index = 0;
+    while (index < arguments.length)
+        fieldNames[index] = arguments[index++];
+    return function oneOfDecorator(prototype, oneofName) {
+        util.decorateType(prototype.constructor)
+            .add(new OneOf(oneofName, fieldNames));
+        Object.defineProperty(prototype, oneofName, {
+            get: util.oneOfGetter(fieldNames),
+            set: util.oneOfSetter(fieldNames)
+        });
+    };
 };
