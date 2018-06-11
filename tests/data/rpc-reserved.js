@@ -1,13 +1,15 @@
 /*eslint-disable block-scoped-var, no-redeclare, no-control-regex, no-prototype-builtins*/
-import * as $protobuf from "../../minimal";
+"use strict";
+
+var $protobuf = require("../../minimal");
 
 // Common aliases
-const $Reader = $protobuf.Reader, $Writer = $protobuf.Writer, $util = $protobuf.util;
+var $Reader = $protobuf.Reader, $Writer = $protobuf.Writer, $util = $protobuf.util;
 
 // Exported root namespace
-const $root = $protobuf.roots.test_rpc || ($protobuf.roots.test_rpc = {});
+var $root = $protobuf.roots["test_rpc-reserved"] || ($protobuf.roots["test_rpc-reserved"] = {});
 
-export const MyService = $root.MyService = (() => {
+$root.MyService = (function() {
 
     /**
      * Constructs a new MyService service.
@@ -40,31 +42,31 @@ export const MyService = $root.MyService = (() => {
     };
 
     /**
-     * Callback as used by {@link MyService#myMethod}.
+     * Callback as used by {@link MyService#delete_}.
      * @memberof MyService
-     * @typedef MyMethodCallback
+     * @typedef DeleteCallback
      * @type {function}
      * @param {Error|null} error Error, if any
      * @param {MyResponse} [response] MyResponse
      */
 
     /**
-     * Calls MyMethod.
-     * @function myMethod
+     * Calls Delete.
+     * @function delete
      * @memberof MyService
      * @instance
      * @param {IMyRequest} request MyRequest message or plain object
-     * @param {MyService.MyMethodCallback} callback Node-style callback called with the error, if any, and MyResponse
+     * @param {MyService.DeleteCallback} callback Node-style callback called with the error, if any, and MyResponse
      * @returns {undefined}
      * @variation 1
      */
-    Object.defineProperty(MyService.prototype.myMethod = function myMethod(request, callback) {
-        return this.rpcCall(myMethod, $root.MyRequest, $root.MyResponse, request, callback);
-    }, "name", { value: "MyMethod" });
+    Object.defineProperty(MyService.prototype["delete"] = function delete_(request, callback) {
+        return this.rpcCall(delete_, $root.MyRequest, $root.MyResponse, request, callback);
+    }, "name", { value: "Delete" });
 
     /**
-     * Calls MyMethod.
-     * @function myMethod
+     * Calls Delete.
+     * @function delete
      * @memberof MyService
      * @instance
      * @param {IMyRequest} request MyRequest message or plain object
@@ -75,7 +77,7 @@ export const MyService = $root.MyService = (() => {
     return MyService;
 })();
 
-export const MyRequest = $root.MyRequest = (() => {
+$root.MyRequest = (function() {
 
     /**
      * Properties of a MyRequest.
@@ -94,7 +96,7 @@ export const MyRequest = $root.MyRequest = (() => {
      */
     function MyRequest(properties) {
         if (properties)
-            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+            for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                 if (properties[keys[i]] != null)
                     this[keys[i]] = properties[keys[i]];
     }
@@ -163,9 +165,9 @@ export const MyRequest = $root.MyRequest = (() => {
     MyRequest.decode = function decode(reader, length) {
         if (!(reader instanceof $Reader))
             reader = $Reader.create(reader);
-        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.MyRequest();
+        var end = length === undefined ? reader.len : reader.pos + length, message = new $root.MyRequest();
         while (reader.pos < end) {
-            let tag = reader.uint32();
+            var tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
                 message.path = reader.string();
@@ -222,7 +224,7 @@ export const MyRequest = $root.MyRequest = (() => {
     MyRequest.fromObject = function fromObject(object) {
         if (object instanceof $root.MyRequest)
             return object;
-        let message = new $root.MyRequest();
+        var message = new $root.MyRequest();
         if (object.path != null)
             message.path = String(object.path);
         return message;
@@ -240,7 +242,7 @@ export const MyRequest = $root.MyRequest = (() => {
     MyRequest.toObject = function toObject(message, options) {
         if (!options)
             options = {};
-        let object = {};
+        var object = {};
         if (options.defaults)
             object.path = "";
         if (message.path != null && message.hasOwnProperty("path"))
@@ -262,7 +264,7 @@ export const MyRequest = $root.MyRequest = (() => {
     return MyRequest;
 })();
 
-export const MyResponse = $root.MyResponse = (() => {
+$root.MyResponse = (function() {
 
     /**
      * Properties of a MyResponse.
@@ -281,7 +283,7 @@ export const MyResponse = $root.MyResponse = (() => {
      */
     function MyResponse(properties) {
         if (properties)
-            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+            for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                 if (properties[keys[i]] != null)
                     this[keys[i]] = properties[keys[i]];
     }
@@ -350,9 +352,9 @@ export const MyResponse = $root.MyResponse = (() => {
     MyResponse.decode = function decode(reader, length) {
         if (!(reader instanceof $Reader))
             reader = $Reader.create(reader);
-        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.MyResponse();
+        var end = length === undefined ? reader.len : reader.pos + length, message = new $root.MyResponse();
         while (reader.pos < end) {
-            let tag = reader.uint32();
+            var tag = reader.uint32();
             switch (tag >>> 3) {
             case 2:
                 message.status = reader.int32();
@@ -409,7 +411,7 @@ export const MyResponse = $root.MyResponse = (() => {
     MyResponse.fromObject = function fromObject(object) {
         if (object instanceof $root.MyResponse)
             return object;
-        let message = new $root.MyResponse();
+        var message = new $root.MyResponse();
         if (object.status != null)
             message.status = object.status | 0;
         return message;
@@ -427,7 +429,7 @@ export const MyResponse = $root.MyResponse = (() => {
     MyResponse.toObject = function toObject(message, options) {
         if (!options)
             options = {};
-        let object = {};
+        var object = {};
         if (options.defaults)
             object.status = 0;
         if (message.status != null && message.hasOwnProperty("status"))
@@ -449,4 +451,4 @@ export const MyResponse = $root.MyResponse = (() => {
     return MyResponse;
 })();
 
-export { $root as default };
+module.exports = $root;
