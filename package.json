@@ -1,5 +1,5 @@
 {
-  "name": "protobufjs",
+  "name": "@ortoo/protobufjs",
   "version": "6.11.4",
   "versionScheme": "~",
   "description": "Protocol Buffers for JavaScript (& TypeScript).",
