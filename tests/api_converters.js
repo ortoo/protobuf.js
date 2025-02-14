@@ -12,7 +12,7 @@ tape.test("converters", function(test) {
 
         test.test(test.name + " - Message#toObject", function(test) {
 
-            test.plan(5);
+            test.plan(6);
 
             test.test(test.name + " - called with defaults = true", function(test) {
                 var obj = Message.toObject(Message.create(), { defaults: true });
@@ -23,7 +23,7 @@ tape.test("converters", function(test) {
                 test.same(obj.uint64Val, { low: 0, high: 0, unsigned: true }, "should set uint64Val");
                 test.same(obj.uint64Repeated, [], "should set uint64Repeated");
 
-                test.same(obj.bytesVal, [], "should set bytesVal");
+                test.same(obj.bytesVal, protobuf.util.newBuffer(0), "should set bytesVal");
                 test.same(obj.bytesRepeated, [], "should set bytesRepeated");
 
                 test.equal(obj.enumVal, 1, "should set enumVal to the first defined value");
@@ -103,7 +103,7 @@ tape.test("converters", function(test) {
                     bytesVal: buf,
                     bytesRepeated: [buf, buf],
                     enumVal: 2,
-                    enumRepeated: [1, 2],
+                    enumRepeated: [1, 100, 2],
                     int64Map: {
                         a: protobuf.util.Long.fromNumber(2),
                         b: protobuf.util.Long.fromNumber(3)
@@ -127,9 +127,26 @@ tape.test("converters", function(test) {
                     test.ok(Buffer.isBuffer(Message.toObject(msg, { bytes: Buffer }).bytesVal), "bytes to buffers");
 
                 test.equal(Message.toObject(msg, { enums: String }).enumVal, "TWO", "enums to strings");
+                test.equal(Message.toObject(msg, { enums: String }).enumRepeated[1], 100, "enums to strings does not change unknown values");
 
                 test.end();
             });
+
+            test.test(test.name + " - Message.toObject with empty buffers", function(test) {
+                var msg = Message.create({
+                    bytesVal: protobuf.util.newBuffer(0),
+                });
+
+                test.equal(Message.toObject(msg, { bytes: String }).bytesVal, "", "bytes to base64 strings");
+
+                if (protobuf.util.isNode) {
+                    const bytesVal = Message.toObject(msg, { bytes: Buffer }).bytesVal; 
+                    test.ok(Buffer.isBuffer(bytesVal), "bytes to buffers");
+                    test.equal(bytesVal.length, 0, "empty buffer");
+                }
+
+                test.end();
+            });            
 
         });
 
@@ -141,7 +158,7 @@ tape.test("converters", function(test) {
                 bytesVal: "MTEx",
                 bytesRepeated: ["MTEx", [49, 49, 49]],
                 enumVal: "ONE",
-                enumRepeated: [2, "TWO"],
+                enumRepeated: [2, "TWO", 100],
                 int64Map: {
                     a: 2,
                     b: "3"
@@ -160,7 +177,7 @@ tape.test("converters", function(test) {
             test.same(msg.bytesVal, buf, "should set bytesVal from a base64 string");
             test.same(msg.bytesRepeated, [ buf, buf ], "should set bytesRepeated from a base64 string and a plain array");
             test.equal(msg.enumVal, 1, "should set enumVal from a string");
-            test.same(msg.enumRepeated, [ 2, 2 ], "should set enumRepeated from a number and a string");
+            test.same(msg.enumRepeated, [ 2, 2, 100 ], "should set enumRepeated from a number and a string and preserve unknown value");
             test.same(msg.int64Map, { a: { low: 2, high: 0, unsigned: false }, b: { low: 3, high: 0, unsigned: false } }, "should set int64Map from a number and a string");
 
             test.end();

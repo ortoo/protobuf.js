@@ -1,11 +1,11 @@
 "use strict";
 module.exports = static_target;
 
-var protobuf   = require("../.."),
-    UglifyJS   = require("uglify-js"),
+var UglifyJS   = require("uglify-js"),
     espree     = require("espree"),
     escodegen  = require("escodegen"),
-    estraverse = require("estraverse");
+    estraverse = require("estraverse"),
+    protobuf   = require("protobufjs");
 
 var Type      = protobuf.Type,
     Service   = protobuf.Service,
@@ -109,6 +109,10 @@ function aOrAn(name) {
 function buildNamespace(ref, ns) {
     if (!ns)
         return;
+
+    if (ns instanceof Service && !config.service)
+        return;
+
     if (ns.name !== "") {
         push("");
         if (!ref && config.es6)
@@ -307,8 +311,14 @@ function buildFunction(type, functionName, gen, scope) {
         push("};");
 }
 
-function toJsType(field) {
+function toJsType(field, parentIsInterface = false) {
     var type;
+
+    // With null semantics, interfaces are composed from interfaces and messages from messages
+    // Without null semantics, child types depend on the --force-message flag
+    var asInterface = config["null-semantics"]
+        ? parentIsInterface && !(field.resolvedType instanceof protobuf.Enum)
+        : !(field.resolvedType instanceof protobuf.Enum || config.forceMessage);
 
     switch (field.type) {
         case "double":
@@ -337,10 +347,12 @@ function toJsType(field) {
             type = "Uint8Array";
             break;
         default:
-            if (field.resolve().resolvedType)
-                type = exportName(field.resolvedType, !(field.resolvedType instanceof protobuf.Enum || config.forceMessage));
-            else
+            if (field.resolve().resolvedType) {
+                type = exportName(field.resolvedType, asInterface);
+            }
+            else {
                 type = "*"; // should not happen
+            }
             break;
     }
     if (field.map)
@@ -350,7 +362,71 @@ function toJsType(field) {
     return type;
 }
 
+function syntaxForType(type) {
+
+    var syntax = null;
+    var namespace = type;
+
+    while (syntax === null && namespace !== null) {
+        if (namespace.options != null && "syntax" in namespace.options) {
+            syntax = namespace.options["syntax"];
+        }
+        else {
+            namespace = namespace.parent;
+        }
+    }
+
+    return syntax !== null ? syntax : "proto2";
+}
+
+function isExplicitPresence(field, syntax) {
+
+    // In proto3, optional fields are explicit
+    if (syntax === "proto3") {
+        return field.options != null && field.options["proto3_optional"] === true;
+    }
+
+    // In proto2, fields are explicitly optional if they are not part of a map, array or oneOf group
+    if (syntax === "proto2") {
+        return field.optional && !(field.partOf || field.repeated || field.map);
+    }
+
+    throw new Error("Unknown proto syntax: [" + syntax + "]");
+}
+
+function isImplicitPresence(field, syntax) {
+
+    // In proto3, everything not marked optional has implicit presence (including maps and repeated fields)
+    if (syntax === "proto3") {
+        return field.options == null || field.options["proto3_optional"] !== true;
+    }
+
+    // In proto2, nothing has implicit presence
+    if (syntax === "proto2") {
+        return false;
+    }
+
+    throw new Error("Unknown proto syntax: [" + syntax + "]");
+}
+
+function isOptionalOneOf(oneof, syntax) {
+
+    if (syntax === "proto2") {
+        return false;
+    }
+
+    if (oneof.fieldsArray == null || oneof.fieldsArray.length !== 1) {
+        return false;
+    }
+
+    var field = oneof.fieldsArray[0];
+
+    return field.options != null && field.options["proto3_optional"] === true;
+}
+
 function buildType(ref, type) {
+
+    var syntax = syntaxForType(type);
 
     if (config.comments) {
         var typeDef = [
@@ -361,10 +437,30 @@ function buildType(ref, type) {
         type.fieldsArray.forEach(function(field) {
             var prop = util.safeProp(field.name); // either .name or ["name"]
             prop = prop.substring(1, prop.charAt(0) === "[" ? prop.length - 1 : prop.length);
-            var jsType = toJsType(field);
-            if (field.optional)
-                jsType = jsType + "|null";
-            typeDef.push("@property {" + jsType + "} " + (field.optional ? "[" + prop + "]" : prop) + " " + (field.comment || type.name + " " + field.name));
+            var jsType = toJsType(field, /* parentIsInterface = */ true);
+            var nullable = false;
+            if (config["null-semantics"]) {
+                // With semantic nulls, only explicit optional fields and one-of members can be set to null
+                // Implicit fields (proto3), maps and lists can be omitted, but if specified must be non-null
+                // Implicit fields will take their default value when the message is constructed
+                if (isExplicitPresence(field, syntax) || field.partOf) {
+                    jsType = jsType + "|null|undefined";
+                    nullable = true;
+                }
+                else if (isImplicitPresence(field, syntax) || field.repeated || field.map) {
+                    jsType = jsType + "|undefined";
+                    nullable = true;
+                }
+            }
+            else {
+                // Without semantic nulls, everything is optional in proto3
+                // Do not allow |undefined to keep backwards compatibility
+                if (field.optional) {
+                    jsType = jsType + "|null";
+                    nullable = true;
+                }
+            }
+            typeDef.push("@property {" + jsType + "} " + (nullable ? "[" + prop + "]" : prop) + " " + (field.comment || type.name + " " + field.name));
         });
         push("");
         pushComment(typeDef);
@@ -389,9 +485,22 @@ function buildType(ref, type) {
         var prop = util.safeProp(field.name);
         if (config.comments) {
             push("");
-            var jsType = toJsType(field);
-            if (field.optional && !field.map && !field.repeated && field.resolvedType instanceof Type)
-                jsType = jsType + "|null|undefined";
+            var jsType = toJsType(field, /* parentIsInterface = */ false);
+            if (config["null-semantics"]) {
+                // With semantic nulls, fields are nullable if they are explicitly optional or part of a one-of
+                // Maps, repeated values and fields with implicit defaults are never null after construction
+                // Members are never undefined, at a minimum they are initialized to null
+                if (isExplicitPresence(field, syntax) || field.partOf) {
+                    jsType = jsType + "|null";
+                }
+            }
+            else {
+                // Without semantic nulls, everything is optional in proto3
+                // Keep |undefined for backwards compatibility
+                if (field.optional && !field.map && !field.repeated && (field.resolvedType instanceof Type || config["null-defaults"]) || field.partOf) {
+                    jsType = jsType + "|null|undefined";
+                }
+            }
             pushComment([
                 field.comment || type.name + " " + field.name + ".",
                 "@member {" + jsType + "} " + field.name,
@@ -402,10 +511,17 @@ function buildType(ref, type) {
             push("");
             firstField = false;
         }
+        // With semantic nulls, only explict optional fields and one-of members are null by default
+        // Otherwise use field.optional, which doesn't consider proto3, maps, repeated fields etc.
+        var nullDefault = config["null-semantics"]
+            ? isExplicitPresence(field, syntax)
+            : field.optional && config["null-defaults"];
         if (field.repeated)
             push(escapeName(type.name) + ".prototype" + prop + " = $util.emptyArray;"); // overwritten in constructor
         else if (field.map)
             push(escapeName(type.name) + ".prototype" + prop + " = $util.emptyObject;"); // overwritten in constructor
+        else if (field.partOf || nullDefault)
+            push(escapeName(type.name) + ".prototype" + prop + " = null;"); // do not set default value for oneof members
         else if (field.long)
             push(escapeName(type.name) + ".prototype" + prop + " = $util.Long ? $util.Long.fromBits("
                     + JSON.stringify(field.typeDefault.low) + ","
@@ -430,12 +546,17 @@ function buildType(ref, type) {
         }
         oneof.resolve();
         push("");
-        pushComment([
-            oneof.comment || type.name + " " + oneof.name + ".",
-            "@member {" + oneof.oneof.map(JSON.stringify).join("|") + "|undefined} " + escapeName(oneof.name),
-            "@memberof " + exportName(type),
-            "@instance"
-        ]);
+        if (isOptionalOneOf(oneof, syntax)) {
+            push("// Virtual OneOf for proto3 optional field");
+        }
+        else {
+            pushComment([
+                oneof.comment || type.name + " " + oneof.name + ".",
+                "@member {" + oneof.oneof.map(JSON.stringify).join("|") + "|undefined} " + escapeName(oneof.name),
+                "@memberof " + exportName(type),
+                "@instance"
+            ]);
+        }
         push("Object.defineProperty(" + escapeName(type.name) + ".prototype, " + JSON.stringify(oneof.name) +", {");
         ++indent;
             push("get: $util.oneOfGetter($oneOfFields = [" + oneof.oneof.map(JSON.stringify).join(", ") + "]),");
@@ -583,6 +704,28 @@ function buildType(ref, type) {
         --indent;
         push("};");
     }
+
+    if (config.typeurl) {
+        push("");
+        pushComment([
+            "Gets the default type url for " + type.name,
+            "@function getTypeUrl",
+            "@memberof " + exportName(type),
+            "@static",
+            "@param {string} [typeUrlPrefix] your custom typeUrlPrefix(default \"type.googleapis.com\")",
+            "@returns {string} The default type url"
+        ]);
+        push(escapeName(type.name) + ".getTypeUrl = function getTypeUrl(typeUrlPrefix) {");
+        ++indent;
+            push("if (typeUrlPrefix === undefined) {");
+            ++indent;
+                push("typeUrlPrefix = \"type.googleapis.com\";");
+            --indent;
+            push("}");
+            push("return typeUrlPrefix + \"/" + exportName(type) + "\";");
+        --indent;
+        push("};");
+    }
 }
 
 function buildService(ref, service) {
@@ -675,14 +818,17 @@ function buildEnum(ref, enm) {
     var comment = [
         enm.comment || enm.name + " enum.",
         enm.parent instanceof protobuf.Root ? "@exports " + escapeName(enm.name) : "@name " + exportName(enm),
-        config.forceEnumString ? "@enum {number}" : "@enum {string}",
+        config.forceEnumString ? "@enum {string}" : "@enum {number}",
     ];
     Object.keys(enm.values).forEach(function(key) {
         var val = config.forceEnumString ? key : enm.values[key];
         comment.push((config.forceEnumString ? "@property {string} " : "@property {number} ") + key + "=" + val + " " + (enm.comments[key] || key + " value"));
     });
     pushComment(comment);
-    push(escapeName(ref) + "." + escapeName(enm.name) + " = (function() {");
+    if (!ref && config.es6)
+        push("export const " + escapeName(enm.name) + " = " + escapeName(ref) + "." + escapeName(enm.name) + " = (() => {");
+    else
+        push(escapeName(ref) + "." + escapeName(enm.name) + " = (function() {");
     ++indent;
         push((config.es6 ? "const" : "var") + " valuesById = {}, values = Object.create(valuesById);");
         var aliased = [];

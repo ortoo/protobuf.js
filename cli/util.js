@@ -1,20 +1,7 @@
 "use strict";
-var fs            = require("fs"),
-    path          = require("path"),
-    child_process = require("child_process");
-
-var semver;
-
-try {
-    // installed as a peer dependency
-    require.resolve("protobufjs");
-    exports.pathToProtobufJs = "protobufjs";
-} catch (e) {
-    // local development, i.e. forked from github
-    exports.pathToProtobufJs = "..";
-}
-
-var protobuf = require(exports.pathToProtobufJs);
+var fs       = require("fs"),
+    path     = require("path"),
+    protobuf = require("protobufjs");
 
 function basenameCompare(a, b) {
     var aa = String(a).replace(/\.\w+$/, "").split(/(-?\d*\.?\d+)/g),
@@ -113,49 +100,6 @@ exports.inspect = function inspect(object, indent) {
     return sb.join("\n");
 };
 
-function modExists(name, version) {
-    for (var i = 0; i < module.paths.length; ++i) {
-        try {
-            var pkg = JSON.parse(fs.readFileSync(path.join(module.paths[i], name, "package.json")));
-            return semver
-                ? semver.satisfies(pkg.version, version)
-                : parseInt(pkg.version, 10) === parseInt(version.replace(/^[\^~]/, ""), 10); // used for semver only
-        } catch (e) {/**/}
-    }
-    return false;
-}
-
-function modInstall(install) {
-    child_process.execSync("npm --silent install " + (typeof install === "string" ? install : install.join(" ")), {
-        cwd: __dirname,
-        stdio: "ignore"
-    });
-}
-
-exports.setup = function() {
-    var pkg = require(path.join(__dirname, "..", "package.json"));
-    var version = pkg.dependencies["semver"] || pkg.devDependencies["semver"];
-    if (!modExists("semver", version)) {
-        process.stderr.write("installing semver@" + version + "\n");
-        modInstall("semver@" + version);
-    }
-    semver = require("semver"); // used from now on for version comparison
-    var install = [];
-    pkg.cliDependencies.forEach(function(name) {
-        if (name === "semver")
-            return;
-        version = pkg.dependencies[name] || pkg.devDependencies[name];
-        if (!modExists(name, version)) {
-            process.stderr.write("installing " + name + "@" + version + "\n");
-            install.push(name + "@" + version);
-        }
-    });
-    require("../scripts/postinstall"); // emit postinstall warning, if any
-    if (!install.length)
-        return;
-    modInstall(install);
-};
-
 exports.wrap = function(OUTPUT, options) {
     var name = options.wrap || "default";
     var wrap;
@@ -179,5 +123,121 @@ exports.pad = function(str, len, l) {
     while (str.length < len)
         str = l ? str + " " : " " + str;
     return str;
+};
+
+
+/**
+ * DFS to get all message dependencies, cache in filterMap.
+ * @param {Root} root  The protobuf root instance
+ * @param {Message} message  The message need to process.
+ * @param {Map} filterMap  The result of message you need and their dependencies.
+ * @param {Map} flatMap  A flag to record whether the message was searched.
+ * @returns {undefined}  Does not return a value
+ */
+function dfsFilterMessageDependencies(root, message, filterMap, flatMap) {
+    if (message instanceof protobuf.Type) {
+        if (flatMap.get(`${message.fullName}`)) return;
+        flatMap.set(`${message.fullName}`, true);
+        for (var field of message.fieldsArray) {
+            if (field.resolvedType) {
+                // a nested message
+                if (field.resolvedType.parent.name === message.name) {
+                    var nestedMessage = message.nested[field.resolvedType.name];
+                    dfsFilterMessageDependencies(root, nestedMessage, filterMap, flatMap);
+                    continue;
+                }
+                var packageName = field.resolvedType.parent.name;
+                var typeName = field.resolvedType.name;
+                var fullName = packageName ? `${packageName}.${typeName}` : typeName;
+                doFilterMessage(root, { messageNames: [fullName] }, filterMap, flatMap, packageName);
+            }
+        }
+    }
+}
+
+/**
+ * DFS to get all message you need and their dependencies, cache in filterMap.
+ * @param {Root} root  The protobuf root instance
+ * @param {object} needMessageConfig  Need message config:
+ * @param {string[]} needMessageConfig.messageNames  The message names array in the root namespace you need to gen. example: [msg1, msg2]
+ * @param {Map} filterMap The result of message you need and their dependencies.
+ * @param {Map} flatMap A flag to record whether the message was searched.
+ * @param {string} currentPackageName  Current package name
+ * @returns {undefined}  Does not return a value
+ */
+function doFilterMessage(root, needMessageConfig, filterMap, flatMap, currentPackageName) {
+    var needMessageNames = needMessageConfig.messageNames;
+
+    for (var messageFullName of needMessageNames) {
+        var nameSplit = messageFullName.split(".");
+        var packageName = "";
+        var messageName = "";
+        if (nameSplit.length > 1) {
+            packageName = nameSplit[0];
+            messageName = nameSplit[1];
+        } else {
+            messageName = nameSplit[0];
+        }
+
+        // in Namespace
+        if (packageName) {
+            var ns = root.nested[packageName];
+            if (!ns || !(ns instanceof protobuf.Namespace)) {
+                throw new Error(`package not foud ${currentPackageName}.${messageName}`);
+            }
+
+            doFilterMessage(root, { messageNames: [messageName] }, filterMap, flatMap, packageName);
+        } else {
+            var message = root.nested[messageName];
+
+            if (currentPackageName) {
+                message = root.nested[currentPackageName].nested[messageName];
+            }
+
+            if (!message) {
+                throw new Error(`message not foud ${currentPackageName}.${messageName}`);
+            }
+
+            var set = filterMap.get(currentPackageName);
+            if (!filterMap.has(currentPackageName)) {
+                set = new Set();
+                filterMap.set(currentPackageName, set);
+            }
+
+            set.add(messageName);
+
+            // dfs to find all dependencies
+            dfsFilterMessageDependencies(root, message, filterMap, flatMap, currentPackageName);
+        }
+    }
+}
+
+/**
+ * filter the message you need and their dependencies, all others will be delete from root.
+ * @param {Root} root  Root the protobuf root instance
+ * @param {object} needMessageConfig  Need message config:
+ * @param {string[]} needMessageConfig.messageNames  Tthe message names array in the root namespace you need to gen. example: [msg1, msg2]
+ * @returns {boolean} True if a message should present in the generated files
+ */
+exports.filterMessage = function (root, needMessageConfig) {
+    var filterMap = new Map();
+    var flatMap = new Map();
+    doFilterMessage(root, needMessageConfig, filterMap, flatMap, "");
+    root._nestedArray = root._nestedArray.filter(ns => {
+        if (ns instanceof protobuf.Type || ns instanceof protobuf.Enum) {
+            return filterMap.get("").has(ns.name);
+        } else if (ns instanceof protobuf.Namespace) {
+            if (!filterMap.has(ns.name)) {
+                return false;
+            }
+            ns._nestedArray = ns._nestedArray.filter(nns => {
+                const nnsSet = filterMap.get(ns.name);
+                return nnsSet.has(nns.name);
+            });
+
+            return true;
+        }
+        return true;
+    });
 };
 
